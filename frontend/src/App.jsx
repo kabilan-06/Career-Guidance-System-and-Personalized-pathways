@@ -52,18 +52,27 @@ import NLPMonitoring from './pages/admin/NLPMonitoring';
 
 // Admin
 import AdminLayout from './layouts/AdminLayout';
-import { AdminDashboard, PlaceholderPage, QuestionsPage, ResumesPage, StudentsPage } from './pages/admin/AdminPages';
+import { AdminDashboard, QuestionsPage, ResumesPage, StudentsPage } from './pages/admin/AdminPages';
 import AdminAssessmentDashboard from './pages/admin/AdminAssessmentDashboard';
 import CreateAssessment from './pages/admin/CreateAssessment';
 import AssessmentsPage from './pages/admin/AssessmentsPage';
 import QuestionBankManagement from './pages/admin/QuestionBankManagement';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import MentorVerificationPage from './pages/admin/MentorVerificationPage';
+import { CareerPathways, CompetencyStandards, AuditReports, PlatformSettings } from './pages/admin/AdminInfoPages';
 import { MentorManagementPage, UserManagementPage } from './pages/admin/AccountManagementPages';
 
 // Mentor
 import MentorLayout from './layouts/MentorLayout';
-import { AssessmentPage, MentorDashboard, Placeholder, ResumePage, StudentsPage as MentorStudentsPage } from './pages/mentor/MentorPages';
+import {
+  AssessmentPage,
+  FeedbackHub,
+  MentorDashboard,
+  MentorProfilePage,
+  Placeholder,
+  ResumePage,
+  StudentsPage as MentorStudentsPage,
+} from './pages/mentor/MentorPages';
 import { BecomeMentor, MentorRegistration, MentorStatus } from './pages/mentor/MentorVerification';
 
 function App() {
@@ -151,10 +160,10 @@ function App() {
                 <Route path="nlp-monitoring" element={<NLPMonitoring />} />
                 <Route path="mentors" element={<MentorVerificationPage />} />
                 <Route path="mentors/manage" element={<MentorManagementPage />} />
-                <Route path="careers" element={<PlaceholderPage title="Career management" description="Manage career paths, recommendations and eligibility criteria." />} />
-                <Route path="skills" element={<PlaceholderPage title="Skills management" description="Maintain the skills taxonomy used across assessments and profiles." />} />
-                <Route path="reports" element={<PlaceholderPage title="Reports & analytics" description="Generate and export platform performance reports." />} />
-                <Route path="settings" element={<PlaceholderPage title="Settings" description="Configure administrative preferences and notification rules." />} />
+                <Route path="careers" element={<CareerPathways />} />
+                <Route path="skills" element={<CompetencyStandards />} />
+                <Route path="reports" element={<AuditReports />} />
+                <Route path="settings" element={<PlatformSettings />} />
               </Route>
 
               {/* Mentor */}
@@ -164,9 +173,9 @@ function App() {
                 <Route path="profiles" element={<MentorStudentsPage profiles />} />
                 <Route path="assessments" element={<AssessmentPage />} />
                 <Route path="resumes" element={<ResumePage />} />
-                <Route path="feedback" element={<Placeholder title="Feedback history" description="Review all feedback provided to your assigned students." />} />
-                <Route path="messages" element={<Placeholder title="Messages" description="Stay in touch with your assigned students." />} />
-                <Route path="profile" element={<Placeholder title="Mentor profile" description="Manage your professional profile and areas of expertise." />} />
+                <Route path="feedback" element={<FeedbackHub />} />
+                <Route path="messages" element={<Placeholder title="Messages" description="Direct mentor–student messaging has no backing service yet — use Feedback Hub for written evaluations." />} />
+                <Route path="profile" element={<MentorProfilePage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

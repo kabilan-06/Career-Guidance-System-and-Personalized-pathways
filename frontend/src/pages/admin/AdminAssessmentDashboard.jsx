@@ -2,24 +2,16 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  FiClipboard, FiUsers, FiBarChart2, FiTrendingUp, FiPlusSquare,
-  FiCheckCircle, FiClock, FiAlertCircle, FiChevronRight,
-  FiShield, FiTarget, FiActivity, FiArrowUpRight
+  FiClipboard, FiUsers, FiPlusSquare,
+  FiCheckCircle, FiShield, FiFileText, FiFilePlus
 } from 'react-icons/fi';
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import { adminService } from '../../services/adminService';
 
-const participationData = [];
-const performanceTrends = [];
-const completionRate = [];
-const categoryStats = [];
-const recentActivity = [];
-
-const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
+const StatCard = ({ icon: Icon, label, value, delay = 0 }) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -36,12 +28,6 @@ const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
     </div>
     <div className="mt-3">
       <div className="text-2xl font-black text-neutral-950 font-mono tracking-tight">{value}</div>
-      {sub && (
-        <div className="flex items-center gap-1 text-[11px] font-mono text-emerald-600 mt-0.5">
-          <FiTrendingUp size={12} />
-          <span>{sub}</span>
-        </div>
-      )}
     </div>
   </motion.div>
 );
@@ -49,12 +35,37 @@ const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
 export default function AdminAssessmentDashboard() {
   const navigate = useNavigate();
   const [assessments, setAssessments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     adminService.getAssessments().then((data) => {
       setAssessments(Array.isArray(data) ? data : data?.content || []);
-    }).catch(() => setAssessments([]));
+      setLoading(false);
+    }).catch(() => {
+      setAssessments([]);
+      setLoading(false);
+    });
   }, []);
+
+  // Derived entirely from the real assessment bank. Attempt-level metrics
+  // (submissions, mean score, completion ratio) need an admin attempts
+  // endpoint that does not exist yet, so they are not shown at all.
+  const publishedCount = assessments.filter((item) => ['PUBLISHED', 'ACTIVE'].includes(item.status)).length;
+  const draftCount = assessments.filter((item) => item.status === 'DRAFT').length;
+
+  const statusStats = Object.values(
+    assessments.reduce((acc, a) => {
+      const key = a.status || 'UNKNOWN';
+      if (!acc[key]) acc[key] = { name: key, count: 0 };
+      acc[key].count += 1;
+      return acc;
+    }, {})
+  );
+
+  const questionVolume = [...assessments]
+    .sort((a, b) => (b.totalQuestions || 0) - (a.totalQuestions || 0))
+    .slice(0, 8)
+    .map((a) => ({ name: a.title?.length > 18 ? `${a.title.slice(0, 18)}...` : a.title, questions: a.totalQuestions || 0 }));
 
   const tooltipStyle = {
     backgroundColor: '#0F172A',
@@ -68,7 +79,7 @@ export default function AdminAssessmentDashboard() {
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-12 antialiased selection:bg-[#0038FF] selection:text-white">
 
-      {/* ── Top Header Ribbon ── */}
+      {/* Top Header Ribbon */}
       <motion.div
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -80,25 +91,24 @@ export default function AdminAssessmentDashboard() {
               Evaluation Engine
             </span>
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 text-[#0038FF] text-[9px] font-bold font-mono uppercase">
-              <FiShield size={9} /> Assessment Core
+              <FiShield size={9} /> Admin
             </span>
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-neutral-950 mt-0.5">
-            Assessment Supervision Hub
+            Assessment Management
           </h1>
-          <p className="text-xs text-neutral-500 mt-1">
-            Real-time evaluation ingestion, test bank health, and cohort participation telemetry.
+          <p className="text-xs sm:text-sm text-neutral-500 max-w-2xl mt-1">
+            Create, publish, and monitor the assessment bank. Attempt-level submission analytics appear here once evaluation history is available.
           </p>
         </div>
 
-        {/* Global Action Controls */}
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => navigate('/admin/assessments/analytics')}
+            onClick={() => navigate('/admin/assessments')}
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 transition-all shadow-2xs font-mono"
           >
-            <FiBarChart2 size={13} />
-            <span>Telemetry</span>
+            <FiClipboard size={13} />
+            <span>Manage Bank</span>
           </button>
 
           <button
@@ -111,277 +121,97 @@ export default function AdminAssessmentDashboard() {
         </div>
       </motion.div>
 
-      {/* ── Top Metric Stat Row ── */}
+      {/* Top Metric Stat Row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={FiClipboard} label="Total Evaluations" value={assessments.length} delay={0.05} />
-        <StatCard icon={FiCheckCircle} label="Active Test Banks" value={assessments.filter((item) => ['PUBLISHED', 'ACTIVE'].includes(item.status)).length} delay={0.1} />
-        <StatCard icon={FiUsers} label="Total Submissions" value="—" delay={0.15} />
-        <StatCard icon={FiTarget} label="Platform Mean Score" value="—" delay={0.2} />
+        <StatCard icon={FiCheckCircle} label="Published" value={publishedCount} delay={0.1} />
+        <StatCard icon={FiFilePlus} label="Drafts" value={draftCount} delay={0.15} />
+        <StatCard icon={FiUsers} label="Total Questions" value={assessments.reduce((sum, a) => sum + (a.totalQuestions || 0), 0)} delay={0.2} />
       </div>
 
-      {/* ── Analytical Row 1: Ingestion vs Completions & Completion Ratio ── */}
-      <div className="grid gap-6 lg:grid-cols-12">
+      {loading ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400 font-mono">
+          Loading assessment dashboard...
+        </div>
+      ) : assessments.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center">
+          <FiFileText className="mx-auto mb-3 text-neutral-300" size={36} />
+          <p className="font-bold text-neutral-800 text-sm">No assessments yet</p>
+          <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto">
+            Create your first assessment to populate the bank and see composition analytics here.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
 
-        {/* Participation Velocity Chart (8 cols) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.25 }}
-          className="lg:col-span-8 bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div className="flex items-center justify-between">
+          {/* Status Composition */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.25 }}
+            className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
+          >
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-                Ingestion Velocity
+                Bank Composition
               </span>
-              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Attempts vs Submissions per Month</h2>
+              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Assessments by Status</h2>
             </div>
-            <div className="flex items-center gap-3 text-[11px] font-mono">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#0038FF]" />
-                <span className="text-neutral-600">Started</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-neutral-300" />
-                <span className="text-neutral-500">Submitted</span>
-              </div>
+
+            <div className="h-56 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}`, 'Assessments']} />
+                  <Bar dataKey="count" fill="#0038FF" radius={[4, 4, 0, 0]} name="Assessments" barSize={36} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
 
-          <div className="h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={participationData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="attempts" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0038FF" stopOpacity={0.16} />
-                    <stop offset="95%" stopColor="#0038FF" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Area type="monotone" dataKey="attempts" stroke="#0038FF" strokeWidth={2} fill="url(#attempts)" name="Started" />
-                <Area type="monotone" dataKey="completions" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="4 4" fill="transparent" name="Submitted" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
-            <span>Overall Completion Efficiency: 91.8%</span>
-            <span>Real-time Telemetry</span>
-          </div>
-        </motion.div>
-
-        {/* Completion Breakdown Donut (4 cols) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.25 }}
-          className="lg:col-span-4 bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Retention Metric
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Session Completion State</h2>
-          </div>
-
-          <div className="h-44 w-full relative flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={completionRate} dataKey="value" innerRadius={50} outerRadius={70} paddingAngle={3}>
-                  {completionRate.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}%`, 'Ratio']} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-xl font-extrabold text-neutral-950 font-mono">68%</span>
-              <span className="text-[9px] uppercase tracking-wider font-mono text-neutral-400">Finished</span>
+            <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
+              <span>Live from the assessment bank</span>
+              <span>{statusStats.length} state{statusStats.length === 1 ? '' : 's'}</span>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="space-y-2 border-t border-neutral-100 pt-3 font-mono text-xs">
-            {completionRate.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                  <span className="text-neutral-700 text-[11px]">{item.name}</span>
-                </div>
-                <span className="font-bold text-neutral-900">{item.value}%</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-      </div>
-
-      {/* ── Analytical Row 2: Category Breakdown & Performance Trajectories ── */}
-      <div className="grid gap-6 lg:grid-cols-2">
-
-        {/* Performance Trends by Track */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.25 }}
-          className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Trajectory Progression
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Average Score Trends by Track</h2>
-          </div>
-
-          <div className="h-56 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={performanceTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis domain={[50, 90]} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}%`]} />
-                <Line type="monotone" dataKey="technical" stroke="#0038FF" strokeWidth={2} dot={{ r: 3, fill: '#0038FF' }} name="Technical" />
-                <Line type="monotone" dataKey="aptitude" stroke="#64748B" strokeWidth={1.5} strokeDasharray="3 3" dot={{ r: 3 }} name="Aptitude" />
-                <Line type="monotone" dataKey="softSkills" stroke="#94A3B8" strokeWidth={1.5} dot={{ r: 3 }} name="Professional" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px] font-mono text-neutral-500 border-t border-neutral-100 pt-3">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#0038FF]" />
-              <span>Technical</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-neutral-500" />
-              <span>Aptitude</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-neutral-400" />
-              <span>Professional</span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Category Stats List */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.25 }}
-          className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Domain Health
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Category Benchmarks & Volumes</h2>
-          </div>
-
-          <div className="space-y-3 pt-1">
-            {categoryStats.map((cat) => (
-              <div key={cat.category} className="rounded-xl bg-[#F8FAFC] border border-neutral-200/60 p-3 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-neutral-900">{cat.category}</span>
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                    <span className="text-neutral-400">{cat.assessments} tests</span>
-                    <span className="font-bold text-neutral-900">Avg: {cat.avgScore}%</span>
-                    <span className="font-bold text-emerald-600">Pass: {cat.passRate}%</span>
-                  </div>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-neutral-200 overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-[#0038FF]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${cat.avgScore}%` }}
-                    transition={{ duration: 0.8, delay: 0.3 }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
-            <span>Overall domain pass benchmark: 70%+</span>
-            <Link to="/admin/assessments" className="text-[#0038FF] hover:underline flex items-center gap-1 font-semibold">
-              Manage bank <FiArrowUpRight size={12} />
-            </Link>
-          </div>
-        </motion.div>
-
-      </div>
-
-      {/* ── Recent Assessment Activity Log ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.25 }}
-        className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs space-y-4"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Live Ingestion Log
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Recent Student Submissions</h2>
-          </div>
-          <Link
-            to="/admin/assessments/analytics"
-            className="flex items-center gap-1 text-xs font-semibold text-[#0038FF] hover:underline font-mono"
+          {/* Question Volume */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.25 }}
+            className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
           >
-            <span>All Submissions</span>
-            <FiChevronRight size={13} />
-          </Link>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
+                Question Volume
+              </span>
+              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Largest Assessments by Question Count</h2>
+            </div>
+
+            <div className="h-56 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={questionVolume} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}`, 'Questions']} />
+                  <Bar dataKey="questions" fill="#64748B" radius={[0, 4, 4, 0]} name="Questions" barSize={16} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
+              <span>Top {questionVolume.length} of {assessments.length}</span>
+              <Link to="/admin/assessments" className="text-[#0038FF] hover:underline flex items-center gap-1 font-semibold">
+                Manage bank
+              </Link>
+            </div>
+          </motion.div>
+
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
-            <thead>
-              <tr className="border-y border-neutral-100 bg-[#F8FAFC] text-[10px] font-mono uppercase tracking-wider text-neutral-400">
-                <th className="px-4 py-3 font-semibold">Student Candidate</th>
-                <th className="px-4 py-3 font-semibold">Evaluation Module</th>
-                <th className="px-4 py-3 font-semibold">Achieved Score</th>
-                <th className="px-4 py-3 font-semibold">Audit Result</th>
-                <th className="px-4 py-3 font-semibold text-right">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {recentActivity.map((row, i) => (
-                <tr key={i} className="hover:bg-neutral-50/70 transition-colors">
-                  <td className="px-4 py-3.5 font-semibold text-neutral-900">
-                    {row.student}
-                  </td>
-
-                  <td className="px-4 py-3.5 text-neutral-600 font-medium">
-                    {row.assessment}
-                  </td>
-
-                  <td className="px-4 py-3.5 font-mono font-bold text-neutral-900">
-                    {row.score}%
-                  </td>
-
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border ${row.status === 'Passed'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
-                        : 'bg-rose-50 text-rose-700 border-rose-200/80'
-                      }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${row.status === 'Passed' ? 'bg-emerald-500' : 'bg-rose-500'
-                        }`} />
-                      {row.status}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-3.5 text-right font-mono text-neutral-400">
-                    {row.time}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+      )}
 
     </div>
   );

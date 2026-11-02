@@ -1,52 +1,43 @@
 package com.careerguidance.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.ResourceHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.support.AllEncompassingFormHttpMessageConverter;
 import org.springframework.web.client.RestClient;
 
+/**
+ * HTTP wiring for the local FastAPI AI service (resume analysis + job matching).
+ * All AI inference runs locally; no external or cloud AI provider is involved.
+ */
 @Configuration
 public class AIServiceConfig {
 
-    private final HuggingFaceProperties hfProperties;
     private final AIServiceProperties aiServiceProperties;
 
-    public AIServiceConfig(HuggingFaceProperties hfProperties, AIServiceProperties aiServiceProperties) {
-        this.hfProperties = hfProperties;
+    public AIServiceConfig(AIServiceProperties aiServiceProperties) {
         this.aiServiceProperties = aiServiceProperties;
     }
 
-    @Bean(name = "huggingFaceRestClient")
-    public RestClient huggingFaceRestClient() {
-        int connectTimeoutMs = hfProperties.getTimeout().getConnectSeconds() * 1000;
-        int readTimeoutMs = hfProperties.getTimeout().getReadSeconds() * 1000;
-
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(connectTimeoutMs > 0 ? connectTimeoutMs : 15000);
-        requestFactory.setReadTimeout(readTimeoutMs > 0 ? readTimeoutMs : 180000);
-
-        String baseUrl = hfProperties.getSpace().getUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            baseUrl = "http://127.0.0.1:7860";
-        }
-
-        RestClient.Builder builder = RestClient.builder()
-                .baseUrl(baseUrl)
-                .requestFactory(requestFactory)
-                .defaultHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .defaultHeader("Origin", baseUrl)
-                .defaultHeader("Referer", baseUrl + "/");
-
-        String token = hfProperties.getToken();
-        if (token != null && !token.trim().isEmpty()) {
-            builder.defaultHeader("Authorization", "Bearer " + token.trim());
-        }
-
-        return builder.build();
-    }
-
     @Bean(name = "localAiRestClient")
-    public RestClient localAiRestClient() {
-        return RestClient.builder().baseUrl(aiServiceProperties.getBaseUrl()).build();
+    public RestClient localAiRestClient(ObjectMapper objectMapper) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(10000);
+        // The first analysis loads the local embedding model into memory, which can
+        // take a couple of minutes on CPU; subsequent requests are far faster.
+        requestFactory.setReadTimeout(300000);
+
+        return RestClient.builder()
+                .baseUrl(aiServiceProperties.getBaseUrl())
+                .requestFactory(requestFactory)
+                .messageConverters(converters -> {
+                    converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
+                    converters.add(new ResourceHttpMessageConverter());
+                    converters.add(new AllEncompassingFormHttpMessageConverter());
+                })
+                .build();
     }
 }

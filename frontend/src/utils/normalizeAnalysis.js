@@ -29,7 +29,14 @@ function readPipelineResult(rawResponse) {
   try {
     const parsed = JSON.parse(rawResponse);
     const root = Array.isArray(parsed) ? parsed[0] : parsed;
-    return root?.final_result && typeof root.final_result === 'object' ? root.final_result : null;
+    if (root?.final_result && typeof root.final_result === 'object') return root.final_result;
+    // The local AI service returns its payload at the root and carries per-role
+    // guidance there, so role switching keeps working without another inference.
+    if (root && typeof root === 'object'
+      && (Array.isArray(root.role_guidance) || Array.isArray(root.job_matches))) {
+      return root;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -60,9 +67,11 @@ function hydrateStep9Data(data) {
     resume: {
       ...(data.resume || {}),
       career_profile: step9.career_profile || data.resume?.career_profile,
-      skills: toArray(selectedRole.skills_you_have).length > 0
-        ? selectedRole.skills_you_have
-        : data.resume?.skills,
+      // The resume's full skill list does not change when a target role is chosen,
+      // so prefer it and only fall back to the role's matched skills for legacy payloads.
+      skills: toArray(data.resume?.skills).length > 0
+        ? data.resume.skills
+        : toArray(selectedRole.skills_you_have),
     },
     career_analysis: step9.career_profile || data.career_analysis,
     career_guidance: {
@@ -73,16 +82,20 @@ function hydrateStep9Data(data) {
     job_matches: toArray(step9.top_5_roles).length > 0 ? step9.top_5_roles : data.job_matches,
     selected_role: selectedRole,
     role_guidance: step9.role_guidance || data.role_guidance,
-    skill_gaps: toTextList(selectedRole.skill_gap?.required?.missing_skills).length > 0
+    skill_gaps: (toTextList(selectedRole.skill_gap?.required?.missing_skills).length
+      + toTextList(selectedRole.skill_gap?.preferred?.missing_skills).length
+      + toTextList(selectedRole.skill_gap?.soft_skills?.missing_skills).length) > 0
       ? [
           ...toTextList(selectedRole.skill_gap?.required?.missing_skills).map((skill) => ({ skill, priority: 'HIGH', reason: 'Required for the selected role' })),
           ...toTextList(selectedRole.skill_gap?.preferred?.missing_skills).map((skill) => ({ skill, priority: 'MEDIUM', reason: 'Preferred for the selected role' })),
           ...toTextList(selectedRole.skill_gap?.soft_skills?.missing_skills).map((skill) => ({ skill, priority: 'LOW', reason: 'Professional skill for the selected role' })),
         ]
       : (toArray(selectedRole.skills_to_learn).length > 0 ? selectedRole.skills_to_learn : data.skill_gaps),
-    learning_priorities: toArray(step9.learning_priorities).length > 0
-      ? step9.learning_priorities
-      : (selectedRole.skills_to_learn || data.learning_priorities),
+    // The selected role's learning order wins; the payload-level list is only the
+    // default (top-ranked role) when no target role has been chosen yet.
+    learning_priorities: toArray(selectedRole.skills_to_learn).length > 0
+      ? selectedRole.skills_to_learn
+      : (toArray(step9.learning_priorities).length > 0 ? step9.learning_priorities : data.learning_priorities),
     course_recommendations: toArray(selectedRole.recommended_courses).length > 0
       ? selectedRole.recommended_courses
       : data.course_recommendations,
@@ -179,7 +192,22 @@ export function normalizeAnalysisResponse(raw) {
   const rawDomainConf = careerAnalysis.domain_confidence || careerAnalysis.primary_confidence || careerGuidance.domain_analysis?.domain_confidence || careerGuidance.domain_analysis?.primary_confidence || careerProfile.primary_confidence || (jobMatches[0]?.matchScore) || 0;
   const domainConfidence = normalizeScore(rawDomainConf);
   const domainSummary = careerAnalysis.summary || careerGuidance.domain_analysis?.summary || careerProfile.domain_explanation?.primary_domain_selection_reason || '';
-  const recommendedRoles = toArray(careerGuidance.recommended_roles || careerGuidance.recommendedRoles || data.top_5_roles);
+  const recommendedRoles = toArray(careerGuidance.recommended_roles || careerGuidance.recommendedRoles || data.top_5_roles).map((role, idx) => {
+    if (typeof role !== 'object' || role === null) {
+      return { rank: idx + 1, role: String(role), domain: '', strengths: [], improvementAreas: [], nextSteps: [] };
+    }
+    return {
+      rank: role.rank ?? idx + 1,
+      role: role.career_role || role.role || role.job_title || role.title || 'Career Role',
+      domain: role.career_domain || role.domain || '',
+      jobMatchScore: normalizeScore(role.job_match_score ?? role.match_score ?? 0),
+      readinessScore: role.readiness_score != null ? normalizeScore(role.readiness_score) : null,
+      overallScore: role.overall_score != null ? normalizeScore(role.overall_score) : null,
+      strengths: toArray(role.strengths),
+      improvementAreas: toArray(role.improvement_areas),
+      nextSteps: toArray(role.recommended_next_steps),
+    };
+  });
 
   // 4. Skill Gap Analysis & Priorities section
   const selectedRole = data.selected_role || data.default_selected_role || (data.role_guidance && data.role_guidance[0]) || {};
@@ -244,7 +272,12 @@ export function normalizeAnalysisResponse(raw) {
     return {
       title,
       provider,
+      domain: c.domain || courseObj.domain || '',
+      semanticSimilarity: typeof c.semantic_similarity === 'number'
+        ? c.semantic_similarity
+        : (typeof courseObj.semantic_similarity === 'number' ? courseObj.semantic_similarity : null),
       targetSkill: c.target_skill || c.skill || courseObj.target_skill || '',
+      recommendationType: c.recommendation_type || c.recommendationType || courseObj.recommendation_type || null,
       priority: c.priority || null,
       learningOrder: c.learning_order ?? null,
       difficulty: courseObj.difficulty || 'Intermediate',
@@ -321,7 +354,7 @@ export function normalizeAnalysisResponse(raw) {
   const selectedJob = selectedRole.job || {};
 
   return {
-    requestId: data.request_id || data.requestId || 'gradio-' + Date.now(),
+    requestId: data.request_id || data.requestId || 'local-' + Date.now(),
     executionTime: data.execution_time || data.executionTime || null,
     resume: {
       candidateName: name,
@@ -339,12 +372,17 @@ export function normalizeAnalysisResponse(raw) {
       projects,
       certifications,
       totalSkills: skills.length,
+      extractionMethod: rawResume.extraction_method || null,
+      processingStatus: rawResume.processing_status || null,
+      fileType: rawResume.file_type || null,
     },
     career: {
       primaryDomain,
       domainConfidence,
       domainSummary,
-      domainScores: careerAnalysis.candidate_domain_profile || careerGuidance.domain_analysis?.candidate_domain_profile || careerProfile.candidate_domain_profile || {},
+      domainScores: careerAnalysis.candidate_domain_profile || careerGuidance.domain_analysis?.candidate_domain_profile || careerProfile.candidate_domain_profile || careerAnalysis.domain_distribution || {},
+      domainProfile: careerAnalysis.candidate_domain_profile || careerGuidance.domain_analysis?.candidate_domain_profile || careerProfile.candidate_domain_profile || {},
+      domainDistribution: careerAnalysis.domain_distribution || careerGuidance.domain_analysis?.domain_distribution || {},
       secondaryDomains: toArray(careerProfile.secondary_domains),
       ambiguity: {
         isAmbiguous: careerProfile.ambiguous ?? false,
@@ -354,18 +392,27 @@ export function normalizeAnalysisResponse(raw) {
       },
       domainExplanation: careerProfile.domain_explanation || null,
       recommendedRoles,
-      selectedRole: {
-        id: data.selected_role_id || data.selectedRoleId || selectedJob.job_id || null,
-        title: selectedJob.job_title || selectedRole.job_title || jobMatches[0]?.jobTitle || '',
-        readiness: normalizeScore(roleFit.career_readiness_percentage),
-        skillGap: normalizeScore(roleFit.overall_skill_gap_percentage),
-        domainAlignment: normalizeScore(selectedJob.domain_score),
-        finalRoleScore: normalizeScore(selectedJob.final_role_score),
-        status: roleFit.status || '',
-        summary: selectedRole.role_explanation?.summary || '',
-        whyRankedHere: selectedRole.role_explanation?.why_ranked_here || null,
-        matchStrengths: selectedRole.role_explanation?.match_strengths || null,
-      },
+      selectedRole: (() => {
+        const topMatch = jobMatches[0] || null;
+        const inferredMatched = topMatch?.matchedSkills?.length ?? 0;
+        const inferredTotal = inferredMatched + (topMatch?.missingSkills?.length ?? 0);
+        // Without an explicit selection the strongest match represents the current
+        // target, so readiness metrics are still shown instead of empty zeroes.
+        return {
+          id: data.selected_role_id || data.selectedRoleId || selectedJob.job_id || topMatch?.jobId || null,
+          title: selectedJob.job_title || selectedRole.job_title || topMatch?.jobTitle || '',
+          readiness: normalizeScore(roleFit.career_readiness_percentage)
+            || (inferredTotal > 0 ? Math.round((inferredMatched / inferredTotal) * 100) : 0),
+          skillGap: normalizeScore(roleFit.overall_skill_gap_percentage)
+            || (inferredTotal > 0 ? Math.round(((inferredTotal - inferredMatched) / inferredTotal) * 100) : 0),
+          domainAlignment: normalizeScore(selectedJob.domain_score) || normalizeScore(topMatch?.matchScore),
+          finalRoleScore: normalizeScore(selectedJob.final_role_score) || normalizeScore(topMatch?.matchScore),
+          status: roleFit.status || '',
+          summary: selectedRole.role_explanation?.summary || topMatch?.jobSummary || '',
+          whyRankedHere: selectedRole.role_explanation?.why_ranked_here || null,
+          matchStrengths: selectedRole.role_explanation?.match_strengths || null,
+        };
+      })(),
     },
     jobMatches,
     skillGap: {

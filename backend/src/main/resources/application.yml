@@ -62,22 +62,6 @@ groq:
 
 ai:
   service:
-    # Local FastAPI resume-analysis fallback; separate from nlp.service and Groq.
+    # Local FastAPI AI service (resume analysis + semantic job matching); separate from nlp.service and Groq.
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
     analyze-endpoint: ${AI_SERVICE_ANALYZE_ENDPOINT:/api/resume/analyze}
-    fallback-enabled: ${AI_FALLBACK_ENABLED:true}
-
-huggingface:
-  space:
-    id: ${HF_SPACE_ID:local-career-guidance-model}
-    url: ${HF_SPACE_URL:http://127.0.0.1:7860}
-    # The deployed Space exposes Gradio's API, not the legacy FastAPI endpoint.
-    api-mode: ${HF_API_MODE:gradio}
-    analyze-endpoint: ${HF_ANALYZE_ENDPOINT:/api/resume/analyze}
-  token: ${HF_TOKEN:}
-  timeout:
-    connect-seconds: ${HF_CONNECT_TIMEOUT:120}
-    read-seconds: ${HF_READ_TIMEOUT:3600}
-  retry:
-    max-attempts: ${HF_MAX_RETRIES:3}
-    backoff-ms: ${HF_RETRY_BACKOFF_MS:3000}

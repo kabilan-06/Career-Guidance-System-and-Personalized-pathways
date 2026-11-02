@@ -1,25 +1,18 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  FiDownload, FiTrendingUp, FiUsers, FiBarChart2,
-  FiTarget, FiChevronDown, FiShield, FiFilter, FiActivity
+  FiUsers, FiBarChart2,
+  FiTarget, FiChevronDown, FiShield, FiActivity, FiFileText
 } from 'react-icons/fi';
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, AreaChart, Area,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
 } from 'recharts';
 import { adminService } from '../../services/adminService';
 
 const ranges = ['Last 7 days', 'Last 30 days', 'Last 3 months', 'Last 6 months', 'This academic year'];
 
-const avgScoreByCategory = [];
-const difficultyData = [];
-const monthlyTrend = [];
-const topAssessments = [];
-const scoreDistribution = [];
-
-const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
+const StatCard = ({ icon: Icon, label, value, delay = 0 }) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -36,12 +29,6 @@ const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
     </div>
     <div className="mt-3">
       <div className="text-2xl font-black text-neutral-950 font-mono tracking-tight">{value}</div>
-      {sub && (
-        <div className="flex items-center gap-1 text-[11px] font-mono text-emerald-600 mt-0.5">
-          <FiTrendingUp size={12} />
-          <span>{sub}</span>
-        </div>
-      )}
     </div>
   </motion.div>
 );
@@ -49,12 +36,41 @@ const StatCard = ({ icon: Icon, label, value, sub, delay = 0 }) => (
 export default function AdminAnalytics() {
   const [range, setRange] = useState('Last 30 days');
   const [assessments, setAssessments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     adminService.getAssessments().then((data) => {
       setAssessments(Array.isArray(data) ? data : data?.content || []);
-    }).catch(() => setAssessments([]));
+      setLoading(false);
+    }).catch(() => {
+      setAssessments([]);
+      setLoading(false);
+    });
   }, []);
+
+  // All charts derive from the real assessment bank only. Per-attempt analytics
+  // (pass rates, score history, mean scores) require an admin attempts endpoint
+  // and stay out until that data source exists - no invented numbers.
+  const categoryStats = Object.values(
+    assessments.reduce((acc, a) => {
+      const key = a.category || 'Uncategorized';
+      if (!acc[key]) acc[key] = { category: key, assessments: 0, published: 0 };
+      acc[key].assessments += 1;
+      if (['PUBLISHED', 'ACTIVE'].includes(a.status)) acc[key].published += 1;
+      return acc;
+    }, {})
+  );
+
+  const difficultyStats = Object.values(
+    assessments.reduce((acc, a) => {
+      const key = a.difficulty || 'UNSPECIFIED';
+      if (!acc[key]) acc[key] = { name: key, count: 0 };
+      acc[key].count += 1;
+      return acc;
+    }, {})
+  );
+
+  const publishedCount = assessments.filter((item) => ['PUBLISHED', 'ACTIVE'].includes(item.status)).length;
 
   const tooltipStyle = {
     backgroundColor: '#0F172A',
@@ -68,7 +84,7 @@ export default function AdminAnalytics() {
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-12 antialiased selection:bg-[#0038FF] selection:text-white">
 
-      {/* ── Top Header & Global Range Controls ── */}
+      {/* Header & Range Controls */}
       <motion.div
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -80,18 +96,17 @@ export default function AdminAnalytics() {
               Evaluation Intelligence
             </span>
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-100 text-[#0038FF] text-[9px] font-bold font-mono uppercase">
-              <FiShield size={9} /> Telemetry Verified
+              <FiShield size={9} /> Assessment bank
             </span>
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-neutral-950 mt-0.5">
             Cohort Analytics & Benchmarks
           </h1>
           <p className="text-xs text-neutral-500 mt-1">
-            Standardized assessment telemetry, pass-rate distribution, and curriculum diagnostics.
+            Composition of the assessment bank by category and difficulty tier. Attempt-level score analytics appear here once evaluation history is available.
           </p>
         </div>
 
-        {/* Action Controls */}
         <div className="flex items-center gap-2.5">
           <div className="relative">
             <select
@@ -103,277 +118,102 @@ export default function AdminAnalytics() {
             </select>
             <FiChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
           </div>
-
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 transition-all shadow-2xs font-mono">
-            <FiDownload size={13} />
-            <span>Export CSV</span>
-          </button>
         </div>
       </motion.div>
 
-      {/* ── KPI Metric Stat Grid ── */}
+      {/* KPI Stat Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={FiUsers} label="Total Assessed" value="—" delay={0.05} />
-        <StatCard icon={FiBarChart2} label="Mean Score" value="—" delay={0.1} />
-        <StatCard icon={FiTarget} label="Platform Pass Rate" value="—" delay={0.15} />
-        <StatCard icon={FiActivity} label="Published Assessments" value={assessments.filter((item) => ['PUBLISHED', 'ACTIVE'].includes(item.status)).length} delay={0.2} />
+        <StatCard icon={FiUsers} label="Total Assessments" value={assessments.length} delay={0.05} />
+        <StatCard icon={FiBarChart2} label="Categories in Use" value={categoryStats.length} delay={0.1} />
+        <StatCard icon={FiTarget} label="Difficulty Tiers" value={difficultyStats.length} delay={0.15} />
+        <StatCard icon={FiActivity} label="Published Assessments" value={publishedCount} delay={0.2} />
       </div>
 
-      {/* ── Row 1: Monthly Trend + Score Distribution ── */}
-      <div className="grid gap-6 lg:grid-cols-12">
+      {loading ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-400 font-mono">
+          Loading assessment analytics...
+        </div>
+      ) : assessments.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center">
+          <FiFileText className="mx-auto mb-3 text-neutral-300" size={36} />
+          <p className="font-bold text-neutral-800 text-sm">No assessments created yet</p>
+          <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto">
+            Create and publish assessments to see category composition and difficulty distribution here.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
 
-        {/* Monthly Performance Trend (7 cols) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.25 }}
-          className="lg:col-span-7 bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div className="flex items-center justify-between">
+          {/* Category Composition */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.25 }}
+            className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
+          >
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-                Longitudinal Trajectory
+                Competency Breakdown
               </span>
-              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Monthly Cohort Performance</h2>
+              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Assessments by Category</h2>
             </div>
-            <div className="flex items-center gap-3 text-[11px] font-mono">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#0038FF]" />
-                <span className="text-neutral-600">Candidates</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-neutral-400" />
-                <span className="text-neutral-500">Pass Rate %</span>
-              </div>
+
+            <div className="h-56 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="category" tick={{ fontSize: 10, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}`, 'Assessments']} />
+                  <Bar dataKey="assessments" fill="#0038FF" radius={[4, 4, 0, 0]} name="Assessments" barSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
 
-          <div className="h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorStudents" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0038FF" stopOpacity={0.16} />
-                    <stop offset="95%" stopColor="#0038FF" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="right" orientation="right" domain={[50, 100]} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Area yAxisId="left" type="monotone" dataKey="students" stroke="#0038FF" strokeWidth={2} fill="url(#colorStudents)" name="Candidates" />
-                <Line yAxisId="right" type="monotone" dataKey="passRate" stroke="#64748B" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3, fill: '#0F172A' }} name="Pass Rate %" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
-            <span>No submission history available</span>
-            <span>Sync: Live</span>
-          </div>
-        </motion.div>
-
-        {/* Score Distribution (5 cols) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.25 }}
-          className="lg:col-span-5 bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Score Dispersion
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Gaussian Score Distribution</h2>
-          </div>
-
-          <div className="h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={scoreDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="range" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} Students`, 'Count']} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={32}>
-                  {scoreDistribution.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
-            <span>Median cohort score: 71.4%</span>
-            <span>Target: 60%+</span>
-          </div>
-        </motion.div>
-
-      </div>
-
-      {/* ── Row 2: Category Breakdown + Difficulty Analysis ── */}
-      <div className="grid gap-6 lg:grid-cols-2">
-
-        {/* Category Performance */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.25 }}
-          className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Competency Breakdown
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Performance by Assessment Domain</h2>
-          </div>
-
-          <div className="h-56 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={avgScoreByCategory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="category" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}%`]} />
-                <Bar dataKey="avgScore" fill="#0038FF" radius={[4, 4, 0, 0]} name="Mean Score %" barSize={22} />
-                <Bar dataKey="passRate" fill="#94A3B8" radius={[4, 4, 0, 0]} name="Pass Rate %" barSize={22} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px] font-mono text-neutral-500 border-t border-neutral-100 pt-3">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#0038FF]" />
-              <span>Mean Score %</span>
+            <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
+              <span>From the live assessment bank</span>
+              <span>{categoryStats.length} categor{categoryStats.length === 1 ? 'y' : 'ies'}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-neutral-400" />
-              <span>Pass Rate %</span>
+          </motion.div>
+
+          {/* Difficulty Composition */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.25 }}
+            className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
+          >
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
+                Curriculum Calibration
+              </span>
+              <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Assessments by Difficulty Tier</h2>
             </div>
-          </div>
-        </motion.div>
 
-        {/* Difficulty Analysis */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.25 }}
-          className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4"
-        >
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              Curriculum Calibration
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Pass vs Fail Rate by Difficulty Tier</h2>
-          </div>
-
-          <div className="h-56 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={difficultyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}%`]} />
-                <Bar dataKey="pass" fill="#0038FF" stackId="a" name="Pass %" barSize={26} />
-                <Bar dataKey="fail" fill="#E2E8F0" stackId="a" radius={[4, 4, 0, 0]} name="Fail %" barSize={26} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px] font-mono text-neutral-500 border-t border-neutral-100 pt-3">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded bg-[#0038FF]" />
-              <span>Pass %</span>
+            <div className="h-56 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={difficultyStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v}`, 'Assessments']} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Assessments" barSize={32}>
+                    {difficultyStats.map((entry, i) => (
+                      <Cell key={i} fill={entry.name === 'EASY' ? '#10B981' : entry.name === 'MEDIUM' ? '#0038FF' : entry.name === 'HARD' ? '#F59E0B' : '#94A3B8'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded bg-neutral-200" />
-              <span>Fail %</span>
+
+            <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
+              <span>Easy / Medium / Hard tier distribution</span>
+              <span>{difficultyStats.length} tier{difficultyStats.length === 1 ? '' : 's'}</span>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
 
-      </div>
-
-      {/* ── Top Assessments Data Table ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.25 }}
-        className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-xs space-y-4"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
-              High-Volume Evaluations
-            </span>
-            <h2 className="text-sm font-bold text-neutral-950 mt-0.5">Top Assessments by Attempt Volume</h2>
-          </div>
-          <span className="text-[11px] font-mono text-neutral-400 bg-neutral-100 px-2.5 py-1 rounded-md">
-            Ranked by Ingestion
-          </span>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
-            <thead>
-              <tr className="border-y border-neutral-100 bg-[#F8FAFC] text-[10px] font-mono uppercase tracking-wider text-neutral-400">
-                <th className="px-4 py-3 font-semibold">Assessment Title</th>
-                <th className="px-4 py-3 font-semibold">Domain</th>
-                <th className="px-4 py-3 font-semibold">Attempts</th>
-                <th className="px-4 py-3 font-semibold">Mean Score</th>
-                <th className="px-4 py-3 font-semibold">Pass Rate</th>
-                <th className="px-4 py-3 font-semibold text-right">Trajectory</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {topAssessments.map((row, i) => (
-                <tr key={i} className="hover:bg-neutral-50/70 transition-colors">
-                  <td className="px-4 py-3.5 font-semibold text-neutral-900">
-                    {row.name}
-                  </td>
-
-                  <td className="px-4 py-3.5">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-blue-50 text-[#0038FF] border border-blue-100">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#0038FF]" />
-                      {row.category}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-3.5 font-mono font-bold text-neutral-800">
-                    {row.attempts}
-                  </td>
-
-                  <td className="px-4 py-3.5 font-mono font-bold text-neutral-900">
-                    {row.avgScore}%
-                  </td>
-
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-neutral-900 min-w-[32px]">
-                        {row.passRate}%
-                      </span>
-                      <div className="w-20 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#0038FF]"
-                          style={{ width: `${row.passRate}%` }}
-                        />
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3.5 text-right font-mono text-emerald-600">
-                    <span className="inline-flex items-center gap-1">
-                      <FiTrendingUp size={12} />
-                      <span>+{(i * 1.8 + 2.4).toFixed(1)}%</span>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+      )}
 
     </div>
   );

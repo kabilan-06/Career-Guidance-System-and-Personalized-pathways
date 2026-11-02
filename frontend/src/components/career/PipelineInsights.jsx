@@ -106,7 +106,7 @@ export default function PipelineInsights({ actionPlan, skillCoverage, dispositio
       )}
 
       {market?.length > 0 && (
-        <Section icon={TrendingUp} title="Market Insights" subtitle="Live demand (Adzuna) per role • Bengaluru, IN">
+        <Section icon={TrendingUp} title="Market Insights" subtitle="Demand profile per role from the AI guidance model">
           <div className="grid gap-3 md:grid-cols-2">
             {market.map((m, i) => (
               <div key={i} className="rounded-xl border border-slate-100 p-4 space-y-1.5">

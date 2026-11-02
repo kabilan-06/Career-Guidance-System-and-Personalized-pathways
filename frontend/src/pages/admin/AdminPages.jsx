@@ -12,8 +12,6 @@ import {
 } from 'react-icons/fi';
 import { adminService } from '../../services/adminService';
 
-const registrations = [];
-const interest = [];
 const normalizeQuestion = (question) => ({
   ...question,
   category: typeof question.category === 'object' ? question.category?.name : question.category,
@@ -133,10 +131,24 @@ const Pagination = ({ count }) => (
 // ── 1. Admin Dashboard Overview ──────────────────────────────────────────────
 export function AdminDashboard() {
   const [data, setData] = useState(null);
+  const [series, setSeries] = useState({ registrations: [], completions: [], domains: [] });
 
   useEffect(() => {
     adminService.getDashboard().then(setData).catch(() => { });
+    adminService
+      .getDashboardSeries()
+      .then((s) =>
+        setSeries({
+          registrations: s?.registrations || [],
+          completions: s?.completions || [],
+          domains: s?.domains || [],
+        })
+      )
+      .catch(() => { /* charts render their empty state */ });
   }, []);
+
+  const registrations = series.registrations;
+  const interest = series.domains;
 
   const metrics = data?.metrics || data || {};
 
@@ -192,26 +204,32 @@ export function AdminDashboard() {
           </div>
 
           <div className="h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={registrations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="fillAdmin" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0038FF" stopOpacity={0.16} />
-                    <stop offset="95%" stopColor="#0038FF" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="#F1F5F9" strokeDasharray="3 3" />
-                <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Area type="monotone" dataKey="n" stroke="#0038FF" strokeWidth={2} fill="url(#fillAdmin)" name="Registrations" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {registrations.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={registrations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="fillAdmin" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0038FF" stopOpacity={0.16} />
+                      <stop offset="95%" stopColor="#0038FF" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke="#F1F5F9" strokeDasharray="3 3" />
+                  <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="n" stroke="#0038FF" strokeWidth={2} fill="url(#fillAdmin)" name="Registrations" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs font-mono text-neutral-400">
+                No registration events in the last 6 months
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
-            <span>Aggregated telemetry from authentication events</span>
-            <span>Real-time Sync</span>
+            <span>Derived from user account creation events</span>
+            <span>Last 6 months</span>
           </div>
         </section>
 
@@ -272,6 +290,9 @@ export function AdminDashboard() {
           </div>
 
           <div className="space-y-2 border-t border-neutral-100 pt-3.5 font-mono text-xs">
+            {interest.length === 0 && (
+              <p className="text-[11px] text-neutral-400">No career-goal data recorded yet</p>
+            )}
             {interest.map((x) => (
               <div key={x.name} className="flex items-center justify-between text-[11px]">
                 <span className="flex items-center gap-2 text-neutral-600 font-medium">
@@ -295,15 +316,21 @@ export function AdminDashboard() {
         </div>
 
         <div className="h-56 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={registrations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="#F1F5F9" strokeDasharray="3 3" />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="n" fill="#0038FF" radius={[4, 4, 0, 0]} barSize={26} name="Completed Tests" />
-            </BarChart>
-          </ResponsiveContainer>
+          {series.completions.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={series.completions} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="#F1F5F9" strokeDasharray="3 3" />
+                <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={{ stroke: '#E2E8F0' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748B', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="n" fill="#0038FF" radius={[4, 4, 0, 0]} barSize={26} name="Completed Tests" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs font-mono text-neutral-400">
+              No submitted assessments in the last 6 months
+            </div>
+          )}
         </div>
       </section>
     </div>

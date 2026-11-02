@@ -6,4 +6,6 @@ import jakarta.persistence.*; import java.time.LocalDateTime;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="mentor_id",nullable=false) private Mentor mentor;
  @Column(nullable=false,length=3000) private String feedback; @Column(updatable=false,nullable=false) private LocalDateTime createdAt;
  @PrePersist void create(){createdAt=LocalDateTime.now();} public void setResume(Resume v){resume=v;} public void setMentor(Mentor v){mentor=v;} public void setFeedback(String v){feedback=v;}
+ public Long getId(){return id;} public Resume getResume(){return resume;} public Mentor getMentor(){return mentor;}
+ public String getFeedback(){return feedback;} public LocalDateTime getCreatedAt(){return createdAt;}
 }

@@ -3,7 +3,7 @@ package com.careerguidance.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-/** Local resume-analysis service used only when the remote Space is transiently unavailable. */
+/** The local FastAPI AI service (resume analysis, semantic job matching) that runs on this machine. */
 @Configuration
 @ConfigurationProperties(prefix = "ai.service")
 public class AIServiceProperties {

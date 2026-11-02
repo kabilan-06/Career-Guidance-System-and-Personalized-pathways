@@ -55,8 +55,8 @@ export default function ResumeUpload() {
       const safeMessages = {
         PROVIDER_RATE_LIMITED: 'AI analysis is temporarily busy. Please try again in a few minutes.',
         PROVIDER_QUOTA_EXCEEDED: 'AI analysis has temporarily reached its processing limit. Please try again later.',
-        SPACE_UNAVAILABLE: 'AI analysis service is temporarily unavailable. Please try again.',
-        SPACE_TIMEOUT: 'AI analysis took too long to complete. Please try again.',
+        LOCAL_AI_UNAVAILABLE: 'The local AI service is unavailable. Please make sure the local AI service is running on port 8000.',
+        LOCAL_AI_ERROR: 'The local AI service could not process this resume. Please try again.',
         INVALID_RESPONSE: 'The AI service returned an unexpected response. Please try again.',
         GRADIO_ERROR: 'The AI service could not process this resume. Please try again.',
       };

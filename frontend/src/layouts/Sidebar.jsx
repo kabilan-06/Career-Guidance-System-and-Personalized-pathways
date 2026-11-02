@@ -27,14 +27,14 @@ const NAV_SECTIONS = [
     items: [
       { to: '/student/dashboard', label: 'Dashboard', icon: FiGrid },
       { to: '/profile', label: 'Candidate Profile', icon: FiUser },
-      { to: '/mentors', label: 'Expert Network', icon: FiUsers },
+      { to: '/mentors', label: 'Find a Mentor', icon: FiUsers },
     ],
   },
   {
     label: 'Assessment Engine',
     items: [
       { to: '/assessments/categories', label: 'Assessment Hub', icon: FiClipboard, exact: true },
-      { to: '/assessment', label: 'Active Assessment', icon: FiCheckSquare, activePaths: ['/assessment', '/assessments/take/'] },
+      { to: '/assessment', label: 'Take Assessment', icon: FiCheckSquare, activePaths: ['/assessment', '/assessments/take/'] },
       { to: '/assessments/coding', label: 'Coding Practice', icon: FiCode },
       { to: '/assessments/history', label: 'Evaluation History', icon: FiClock },
     ],
@@ -42,8 +42,8 @@ const NAV_SECTIONS = [
   {
     label: 'AI Diagnostics',
     items: [
-      { to: '/assessments/ai-analysis', label: 'Diagnostic Engine', icon: FiCpu },
-      { to: '/assessments/skill-growth', label: 'Skill Trajectory', icon: FiTrendingUp },
+      { to: '/assessments/ai-analysis', label: 'AI Performance', icon: FiCpu },
+      { to: '/assessments/skill-growth', label: 'Skill Growth', icon: FiTrendingUp },
     ],
   },
   {
@@ -52,11 +52,11 @@ const NAV_SECTIONS = [
       { to: '/resume', label: 'Resume Workspace', icon: FiFileText, exact: true },
       { to: '/resume/upload', label: 'Upload Document', icon: FiUploadCloud },
       { to: '/resume/ai-guidance', label: 'Career Guidance Hub', icon: FiCompass },
-      { to: '/resume/nlp-results', label: 'NER Extractions', icon: FiLayers },
-      { to: '/resume/skill-taxonomy', label: 'Skill Taxonomy', icon: FiActivity },
-      { to: '/resume/analysis', label: 'Quality Audit', icon: FiBarChart2 },
-      { to: '/resume/skill-profile', label: 'Competency Profile', icon: FiTrendingUp },
-      { to: '/resume/history', label: 'Audit Log Ledger', icon: FiClock },
+      { to: '/resume/nlp-results', label: 'Skill Extractions', icon: FiLayers },
+      { to: '/resume/skill-taxonomy', label: 'Skill Mapping', icon: FiActivity },
+      { to: '/resume/analysis', label: 'Resume Analysis', icon: FiBarChart2 },
+      { to: '/resume/skill-profile', label: 'Skill Profile', icon: FiTrendingUp },
+      { to: '/resume/history', label: 'Analysis History', icon: FiClock },
     ],
   },
 ];
@@ -192,17 +192,6 @@ export default function Sidebar({ open, onClose }) {
           >
             <FiX size={16} />
           </button>
-        </div>
-
-        {/* Top Telemetry Strip */}
-        <div className="px-4 py-2 bg-[#F8FAFC] border-b border-neutral-100 flex items-center justify-between shrink-0 font-mono text-[10px] text-neutral-400">
-          <div className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-neutral-600 uppercase tracking-wider text-[9px]">
-              Pipeline Ready
-            </span>
-          </div>
-          <span className="text-neutral-400">120ms</span>
         </div>
 
         {/* Navigation Sections */}

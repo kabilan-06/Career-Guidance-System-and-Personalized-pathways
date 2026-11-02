@@ -113,6 +113,7 @@ class JobMatcherEngine:
             overall_match_score = round(0.60 * skill_score + 0.40 * (semantic_sim * 100.0), 1)
 
             matches.append({
+                "job_id": job["id"],
                 "job_title": job["job_title"],
                 "company": job["company"],
                 "domain": job["domain"],

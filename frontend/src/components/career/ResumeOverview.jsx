@@ -24,6 +24,9 @@ export default function ResumeOverview({ resume }) {
   const projects = Array.isArray(data.projects) ? data.projects : [];
   const certifications = Array.isArray(data.certifications) ? data.certifications : [];
   const skillsCount = data.totalSkills ?? (Array.isArray(data.skills) ? data.skills.length : 0);
+  const extractionMethod = data.extractionMethod || data.extraction_method || null;
+  const processingStatus = data.processingStatus || data.processing_status || null;
+  const fileType = data.fileType || data.file_type || null;
 
   return (
     <div className="card p-6 space-y-6">
@@ -71,6 +74,27 @@ export default function ResumeOverview({ resume }) {
           <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
             {summary}
           </p>
+        </div>
+      )}
+
+      {/* Pipeline extraction metadata */}
+      {(extractionMethod || processingStatus || fileType) && (
+        <div className="flex flex-wrap gap-2">
+          {processingStatus && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+              <CheckCircle2 size={12} className="text-emerald-500" /> Processing: {String(processingStatus).replaceAll('_', ' ')}
+            </span>
+          )}
+          {extractionMethod && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+              <FileText size={12} className="text-slate-400" /> Text extraction: {String(extractionMethod).replaceAll('_', ' ')}
+            </span>
+          )}
+          {fileType && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+              <FileText size={12} className="text-blue-400" /> Format: {String(fileType).toUpperCase()}
+            </span>
+          )}
         </div>
       )}
 

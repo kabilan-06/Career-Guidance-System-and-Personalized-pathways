@@ -1,5 +1,7 @@
 package com.careerguidance.service;
 
+import java.io.IOException;
+
 import com.careerguidance.constant.AnalysisStatus;
 import com.careerguidance.dto.*;
 import com.careerguidance.entity.AiCareerAnalysis;
@@ -27,12 +29,12 @@ public class AiCareerAnalysisService {
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(".pdf", ".docx", ".doc", ".txt");
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-    private final HuggingFaceAIClient aiClient;
+    private final LocalAIServiceClient aiClient;
     private final AiCareerAnalysisRepository analysisRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
-    public AiCareerAnalysisService(HuggingFaceAIClient aiClient,
+    public AiCareerAnalysisService(LocalAIServiceClient aiClient,
                                    AiCareerAnalysisRepository analysisRepository,
                                    UserRepository userRepository,
                                    ObjectMapper objectMapper) {
@@ -63,8 +65,16 @@ public class AiCareerAnalysisService {
         Long analysisId = analysis.getId();
         logger.info("Created initial AI analysis record ID {} for user ID {}", analysisId, userId);
 
+        byte[] resumeBytes;
         try {
-            AIAnalysisResponse aiResponse = aiClient.analyzeResume(file);
+            resumeBytes = file.getBytes();
+        } catch (IOException ex) {
+            logger.error("Failed to read uploaded resume file for user ID {}: {}", userId, ex.getMessage());
+            throw new AIServiceException("FILE_READ_ERROR", "Could not read uploaded resume file", ex);
+        }
+
+        try {
+            AIAnalysisResponse aiResponse = aiClient.analyzeResume(resumeBytes, originalFilename);
 
             analysis.setStatus(AnalysisStatus.COMPLETED);
             analysis.setHfRequestId(aiResponse.getRequestId());
@@ -79,11 +89,17 @@ public class AiCareerAnalysisService {
             analysis.setExplanations(serializeJson(aiResponse.getExplanations()));
             analysis.setCareerGuidance(serializeJson(aiResponse.getCareerGuidance()));
             analysis.setRoadmap(serializeJson(aiResponse.getRoadmap()));
-            analysis.setRawAiResponse(aiResponse.getRawAiResponse());
+            // Persist the complete local AI payload (including per-role guidance) so the
+            // UI can switch career targets and re-derive gaps/courses/roadmap locally.
+            // The same payload is returned with the upload response so role switching
+            // works immediately, without a follow-up history fetch.
+            String rawPayload = serializeJson(aiResponse);
+            analysis.setRawAiResponse(rawPayload);
 
             analysisRepository.save(analysis);
-            logger.info("Successfully updated analysis ID {} to COMPLETED", analysisId);
+            logger.info("Successfully updated analysis ID {} to COMPLETED using local AI service", analysisId);
 
+            aiResponse.setRawAiResponse(rawPayload);
             return AiAnalysisResultDto.success(analysisId, aiResponse);
 
         } catch (AIServiceException ex) {
@@ -339,14 +355,31 @@ public class AiCareerAnalysisService {
         try {
             Object parsed = objectMapper.readValue(rawAiResponse, Object.class);
             Object root = parsed instanceof List<?> list && !list.isEmpty() ? list.get(0) : parsed;
-            if (!(root instanceof Map<?, ?> rootMap) || !(rootMap.get("final_result") instanceof Map<?, ?> finalMap)) return false;
+            if (!(root instanceof Map<?, ?> rootMap)) return false;
+
+            // Local AI payload: selectable roles are the ranked job matches and the
+            // per-role guidance entries carried at the payload root.
+            for (Object item : asObjectList(rootMap.get("job_matches"))) {
+                Map<String, Object> job = asObjectMap(item);
+                Object jobId = job.get("job_id");
+                if (jobId != null && roleId.equals(String.valueOf(jobId))) return true;
+            }
+            for (Object item : asObjectList(rootMap.get("role_guidance"))) {
+                Map<String, Object> job = asObjectMap(asObjectMap(item).get("job"));
+                Object jobId = job.get("job_id");
+                if (jobId != null && roleId.equals(String.valueOf(jobId))) return true;
+            }
+
+            if (!(rootMap.get("final_result") instanceof Map<?, ?> finalMap)) return false;
             for (Object item : asObjectList(finalMap.get("top_5_roles"))) {
                 Map<String, Object> role = asObjectMap(item);
-                if (roleId.equals(String.valueOf(role.get("job_id")))) return true;
+                Object jobId = role.get("job_id");
+                if (jobId != null && roleId.equals(String.valueOf(jobId))) return true;
             }
             for (Object item : asObjectList(finalMap.get("role_guidance"))) {
                 Map<String, Object> job = asObjectMap(asObjectMap(item).get("job"));
-                if (roleId.equals(String.valueOf(job.get("job_id")))) return true;
+                Object jobId = job.get("job_id");
+                if (jobId != null && roleId.equals(String.valueOf(jobId))) return true;
             }
             return false;
         } catch (Exception ex) {

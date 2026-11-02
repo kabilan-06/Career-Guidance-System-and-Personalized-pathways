@@ -7,4 +7,6 @@ import jakarta.persistence.*; import java.time.LocalDateTime;
  @Column(nullable=false) private String feedbackType; @Column(nullable=false,length=3000) private String feedback;
  @Column(updatable=false,nullable=false) private LocalDateTime createdAt;
  @PrePersist void create(){createdAt=LocalDateTime.now();} public void setMentor(Mentor v){mentor=v;} public void setStudent(User v){student=v;} public void setFeedbackType(String v){feedbackType=v;} public void setFeedback(String v){feedback=v;}
+ public Long getId(){return id;} public Mentor getMentor(){return mentor;} public User getStudent(){return student;}
+ public String getFeedbackType(){return feedbackType;} public String getFeedback(){return feedback;} public LocalDateTime getCreatedAt(){return createdAt;}
 }

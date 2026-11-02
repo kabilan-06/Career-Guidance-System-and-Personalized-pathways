@@ -26,6 +26,7 @@ import ResumeOverview from '../../components/career/ResumeOverview';
 import SkillsAnalysis from '../../components/career/SkillsAnalysis';
 import JobMatches from '../../components/career/JobMatches';
 import CareerAnalysis from '../../components/career/CareerAnalysis';
+import RecommendedRoles from '../../components/career/RecommendedRoles';
 import SkillGapAnalysis from '../../components/career/SkillGapAnalysis';
 import LearningPriorities from '../../components/career/LearningPriorities';
 import CourseRecommendations from '../../components/career/CourseRecommendations';
@@ -222,6 +223,7 @@ export default function AICareerGuidancePage() {
   }
 
   const { resume, jobMatches, career, skillGap, courses, explanations, roadmap, executionTime } = normalized;
+  const recommendedRoles = career.recommendedRoles || [];
   const insights = {
     actionPlan: normalized.actionPlan,
     skillCoverage: normalized.skillCoverage,
@@ -398,6 +400,7 @@ export default function AICareerGuidancePage() {
             <div className="space-y-6">
               <CareerReadiness selectedRole={career.selectedRole} skillGaps={skillGap.gaps} />
               <JobMatches jobMatches={jobMatches} selectedRoleId={career.selectedRole?.id} onSelectRole={handleRoleSelection} selectingRole={savingRole} />
+              {recommendedRoles.length > 0 && <RecommendedRoles roles={recommendedRoles} />}
             </div>
           )}
 

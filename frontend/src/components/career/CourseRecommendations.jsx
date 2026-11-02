@@ -32,16 +32,20 @@ export default function CourseRecommendations({ courseRecommendations }) {
       <div className="grid gap-4 md:grid-cols-2">
         {recommendations.map((rec, idx) => {
           const courseName = rec.course_name || rec.title || null;
-          const targetSkill = rec.target_skill || rec.skill || 'Key Competency';
+          const targetSkill = rec.targetSkill || rec.target_skill || rec.skill || 'Key Competency';
           const isLearningTarget = !courseName
             || ['fallback', 'learning_target', 'learning-target'].includes(
-              String(rec.recommendation_type || rec.recommendationType || '').toLowerCase(),
+              String(rec.recommendationType || rec.recommendation_type || '').toLowerCase(),
             );
 
           const provider = rec.provider || null;
           const difficulty = rec.difficulty || null;
           const duration = rec.duration || null;
           const rating = rec.rating ? Number(rec.rating).toFixed(1) : null;
+          const domain = rec.domain || rec.domainName || null;
+          const semanticSim = typeof rec.semanticSimilarity === 'number'
+            ? rec.semanticSimilarity
+            : (typeof rec.semantic_similarity === 'number' ? rec.semantic_similarity : null);
           const rawScore = rec.recommendation_score ?? rec.score ?? null;
           const score = rawScore !== null ? Math.round(Number(rawScore) * (Number(rawScore) <= 1 ? 100 : 1)) : null;
           const reason = rec.reason || null;
@@ -128,6 +132,16 @@ export default function CourseRecommendations({ courseRecommendations }) {
                   {rating && (
                     <span className="rounded-md bg-amber-50 px-2 py-0.5 font-bold text-amber-700 border border-amber-200/60">
                       ★ {rating}
+                    </span>
+                  )}
+                  {domain && (
+                    <span className="rounded-md bg-indigo-50 px-2 py-0.5 font-bold text-indigo-700 border border-indigo-100">
+                      {String(domain).replaceAll('_', ' ')}
+                    </span>
+                  )}
+                  {semanticSim != null && (
+                    <span className="rounded-md bg-purple-50 px-2 py-0.5 font-bold text-purple-700 border border-purple-100" title="Semantic similarity between your learning need and this course">
+                      Sem. fit {Math.round(semanticSim * (semanticSim <= 1 ? 100 : 1))}%
                     </span>
                   )}
                 </div>

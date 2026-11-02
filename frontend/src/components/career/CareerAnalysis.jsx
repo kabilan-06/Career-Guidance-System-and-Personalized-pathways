@@ -30,7 +30,11 @@ export default function CareerAnalysis({ career, careerAnalysis, careerGuidance 
     : (Array.isArray(guidance.improvement_areas) ? guidance.improvement_areas : []);
 
   // Dynamic domain score breakdown from API
-  const domainScores = analysis.domainScores || analysis.domain_scores || guidance.domain_analysis || analysis.domains || null;
+  const domainScores = analysis.domainProfile || analysis.domainScores || analysis.domain_scores || guidance.domain_analysis || analysis.domains || null;
+  const domainDistribution = analysis.domainDistribution && typeof analysis.domainDistribution === 'object'
+    ? Object.entries(analysis.domainDistribution)
+    : [];
+  const domainSummary = analysis.domainSummary || analysis.summary || null;
   const ambiguity = analysis.ambiguity || {};
   const secondaryDomains = Array.isArray(analysis.secondaryDomains) ? analysis.secondaryDomains : [];
 
@@ -100,6 +104,40 @@ export default function CareerAnalysis({ career, careerAnalysis, careerGuidance 
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {domainSummary && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-blue-500 mb-1.5 flex items-center gap-1.5">
+                <BarChart2 size={14} /> Domain Summary
+              </h4>
+              <p className="text-xs text-blue-950 leading-relaxed">{domainSummary}</p>
+            </div>
+          )}
+
+          {domainDistribution.length > 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-5">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                <BarChart2 size={14} className="text-indigo-500" /> Domain Distribution
+              </h4>
+              <div className="space-y-2">
+                {domainDistribution.map(([domain, count]) => {
+                  const total = domainDistribution.reduce((sum, [, c]) => sum + Number(c || 0), 0) || 1;
+                  const pct = Math.round((Number(count || 0) / total) * 100);
+                  return (
+                    <div key={domain}>
+                      <div className="mb-1 flex justify-between text-xs font-bold text-slate-600">
+                        <span className="capitalize">{String(domain).replaceAll('_', ' ')}</span>
+                        <span>{count} matching role{Number(count) === 1 ? '' : 's'} · {pct}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

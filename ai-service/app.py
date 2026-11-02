@@ -236,36 +236,74 @@ def parse_resume(req: ParseRequest):
         summary=summary,
     )
 
-# ---------------------------------------------------------------------------
-# Gradio UI Integration (for Hugging Face Spaces UI tab)
-# ---------------------------------------------------------------------------
-try:
-    import gradio as gr
-    def gradio_interface():
-        with gr.Blocks(title="AI Career Guidance System") as demo:
-            gr.Markdown("# AI Career Guidance & Resume Analysis System")
-            gr.Markdown("Upload your Resume (PDF/DOCX) to get complete job matching, skill gaps, course recommendations, SHAP explainability, and career roadmap.")
-            file_input = gr.File(label="Upload Resume (PDF/DOCX)")
-            output_json = gr.JSON(label="Full AI Analysis Result")
-            
-            async def run_gradio_pipeline(file_obj):
-                if file_obj is None:
-                    return {"error": "No file uploaded."}
-                from services.resume_service import ResumePipelineService
-                from fastapi import UploadFile
-                
-                with open(file_obj.name, "rb") as f:
-                    content = f.read()
-                
-                upload_file = UploadFile(filename=os.path.basename(file_obj.name), file=open(file_obj.name, "rb"))
-                return await ResumePipelineService.process_resume_file(upload_file)
+class JobMatchRequest(BaseModel):
+    resume_text: str = ""
+    job_description: str = ""
+    job_title: Optional[str] = None
+    candidate_skills: Optional[List[str]] = None
+    job_skills: Optional[List[str]] = None
 
-            analyze_btn = gr.Button("Analyze Resume", variant="primary")
-            analyze_btn.click(fn=run_gradio_pipeline, inputs=[file_input], outputs=[output_json])
-        return demo
+class JobMatchResult(BaseModel):
+    match_score: float
+    matched_skills: List[str]
+    missing_skills: List[str]
+    reasoning: str
 
-    gr_app = gradio_interface()
-    app = gr.mount_gradio_app(app, gr_app, path="/gradio")
-    logger.info("Mounted Gradio interface at /gradio")
-except Exception as e:
-    logger.info(f"Gradio mounting skipped: {e}")
+@app.post("/jobs/match", response_model=JobMatchResult)
+@app.post("/api/jobs/match", response_model=JobMatchResult)
+def match_job(req: JobMatchRequest):
+    from pipeline.model_loader import compute_semantic_similarity
+
+    if req.candidate_skills and len(req.candidate_skills) > 0:
+        cand_skills = set(s.strip() for s in req.candidate_skills if s.strip())
+    else:
+        extracted = extract_skills(req.resume_text)
+        cand_skills = set(s.name for s in extracted)
+
+    if req.job_skills and len(req.job_skills) > 0:
+        target_job_skills = set(s.strip() for s in req.job_skills if s.strip())
+    else:
+        extracted_job = extract_skills(req.job_description)
+        target_job_skills = set(s.name for s in extracted_job)
+
+    matched = sorted(list(cand_skills.intersection(target_job_skills)))
+    missing = sorted(list(target_job_skills.difference(cand_skills)))
+
+    if len(target_job_skills) > 0:
+        skill_score = (len(matched) / len(target_job_skills)) * 100.0
+    else:
+        skill_score = 50.0
+
+    resume_chunk = req.resume_text[:2000] if req.resume_text else ""
+    job_chunk = req.job_description[:2000] if req.job_description else ""
+    if req.job_title:
+        job_chunk = f"{req.job_title}. {job_chunk}"
+
+    sim = compute_semantic_similarity(resume_chunk, job_chunk)
+    semantic_score = max(0.0, min(100.0, sim * 100.0))
+
+    final_score = round(0.55 * skill_score + 0.45 * semantic_score, 1)
+
+    reasoning_parts = []
+    if final_score >= 80:
+        reasoning_parts.append(f"Strong overall alignment ({final_score}% match).")
+    elif final_score >= 60:
+        reasoning_parts.append(f"Moderate competency match ({final_score}% match).")
+    else:
+        reasoning_parts.append(f"Emerging match with skill gaps ({final_score}% match).")
+
+    if matched:
+        reasoning_parts.append(f"Verified core competencies: {', '.join(matched[:5])}.")
+    if missing:
+        reasoning_parts.append(f"Recommended development areas: {', '.join(missing[:5])}.")
+    else:
+        reasoning_parts.append("All primary technical qualifications met.")
+
+    reasoning = " ".join(reasoning_parts)
+
+    return JobMatchResult(
+        match_score=final_score,
+        matched_skills=matched,
+        missing_skills=missing,
+        reasoning=reasoning
+    )

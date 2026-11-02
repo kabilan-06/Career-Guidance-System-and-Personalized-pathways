@@ -41,12 +41,22 @@ export default function ResumeSkillProfile() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([getProfileImpact(), getStudentSkills()])
+    Promise.allSettled([getProfileImpact(), getStudentSkills()])
       .then(([vecRes, skillRes]) => {
-        setVector(vecRes?.data);
-        setSkills(skillRes?.data ?? []);
+        // 404 from profile-impact simply means no vector has been computed yet
+        // (no processed resume) — render the honest empty state, not an error.
+        if (vecRes.status === 'fulfilled') {
+          setVector(vecRes.value?.data ?? null);
+        } else {
+          const status = vecRes.reason?.response?.status;
+          if (status !== 404) {
+            setError('Failed to load candidate skill vector profile.');
+          }
+        }
+        if (skillRes.status === 'fulfilled') {
+          setSkills(skillRes.value?.data ?? []);
+        }
       })
-      .catch(() => setError('Failed to load candidate skill vector profile.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -83,23 +93,27 @@ export default function ResumeSkillProfile() {
     );
   }
 
-  const rv = vector?.resumeVector ?? {};
-  const ov = vector?.overallVector ?? {};
+  const rv = vector?.resumeVector ?? null;
+  const ov = vector?.overallVector ?? null;
+
+  // Real values only — never substitute invented defaults for missing data.
+  const pct = (v) => (v == null ? '—' : `${Math.round(Number(v))}%`);
+  const num = (v) => (v == null ? '—' : String(v));
 
   const chartData = skills.slice(0, 8).map((s) => ({
     skill: s.normalizedName || s.skillName || 'Skill',
-    confidence: Math.round((s.confidence ?? 0.88) * 100),
+    confidence: s.confidence != null ? Math.round(Number(s.confidence) * 100) : null,
   }));
 
   const vectorStats = [
-    { label: 'Skills Extracted',      value: rv.skill_count ?? skills.length, sub: 'Taxonomy normalized' },
-    { label: 'Avg Skill Confidence',  value: `${Math.round((rv.avg_skill_confidence ?? 0.91) * 100)}%`, sub: 'NER certainty' },
-    { label: 'Education Entries',     value: rv.education_count ?? 1, sub: 'Degree verified' },
-    { label: 'Projects Found',        value: rv.project_count ?? 2, sub: 'Portfolio scope' },
-    { label: 'Certifications',        value: rv.certification_count ?? 1, sub: 'Accredited certs' },
-    { label: 'Experience Entries',    value: rv.experience_count ?? 1, sub: 'Work history' },
-    { label: 'Resume Quality Index',  value: `${Math.round(rv.resume_score ?? 84)}%`, sub: 'Section composite' },
-    { label: 'Profile Readiness',     value: `${Math.round(ov.overall_score ?? 88)}%`, sub: 'Semantic calibration' },
+    { label: 'Skills Extracted',      value: num(rv?.skill_count ?? skills.length), sub: 'Taxonomy normalized' },
+    { label: 'Avg Skill Confidence',  value: rv?.avg_skill_confidence != null ? pct(rv.avg_skill_confidence * 100) : '—', sub: 'NER certainty' },
+    { label: 'Education Entries',     value: num(rv?.education_count), sub: 'From parsed resume' },
+    { label: 'Projects Found',        value: num(rv?.project_count), sub: 'Portfolio scope' },
+    { label: 'Certifications',        value: num(rv?.certification_count), sub: 'Accredited certs' },
+    { label: 'Experience Entries',    value: num(rv?.experience_count), sub: 'Work history' },
+    { label: 'Resume Quality Index',  value: pct(rv?.resume_score), sub: 'Section composite' },
+    { label: 'Profile Readiness',     value: pct(ov?.overall_score), sub: 'Semantic calibration' },
   ];
 
   return (
@@ -135,6 +149,26 @@ export default function ResumeSkillProfile() {
             </Link>
           </div>
         </div>
+
+        {/* ── Empty state: no profile vector computed yet ── */}
+        {!vector && skills.length === 0 && !error && (
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-neutral-900">No profile vector computed yet</p>
+              <p className="text-xs text-neutral-500">
+                Upload a resume and run the NLP pipeline — this page fills with real extracted counts,
+                confidence values and readiness scores.
+              </p>
+            </div>
+            <Link
+              to="/resume/upload"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#0038FF] hover:bg-blue-700 text-white px-4 py-2 text-xs font-mono font-bold transition-all shadow-md shadow-blue-500/20"
+            >
+              <FiUploadCloud size={13} />
+              <span>Upload Resume</span>
+            </Link>
+          </div>
+        )}
 
         {/* ── Vector Diagnostic Telemetry KPI Matrix (8 metrics) ── */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 font-mono">
@@ -257,7 +291,7 @@ export default function ResumeSkillProfile() {
 
           <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-neutral-100 pt-3">
             <span>Validated profile entities automatically feed into semantic job recommendation vectors.</span>
-            <span className="text-[#0038FF] font-semibold">Live Integration</span>
+            <span className="text-[#0038FF] font-semibold">Connected</span>
           </div>
         </div>
 

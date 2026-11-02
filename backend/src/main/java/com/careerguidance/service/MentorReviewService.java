@@ -89,9 +89,10 @@ public class MentorReviewService {
         access.assigned(m, id);
         AssessmentResult a = assessments.findBySessionUserIdOrderByCreatedAtDesc(id).stream().findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Assessment not found"));
-        return new AssessmentReviewResponse(a.getId(), a.getTechnicalScore(), a.getAptitudeScore(),
-                a.getInterestScore(), a.getPersonalityScore(), a.getOverallScore(), a.getPersonalityType(),
-                a.getRecommendedCategory(), a.getSession().getCompletedAt());
+        // Entity scores are 1–5 Likert averages; expose them to the mentor UI as 0–100 percentages.
+        return new AssessmentReviewResponse(a.getId(), percent(a.getTechnicalScore()), percent(a.getAptitudeScore()),
+                percent(a.getInterestScore()), percent(a.getPersonalityScore()), percent(a.getOverallScore()),
+                a.getPersonalityType(), a.getRecommendedCategory(), a.getSession().getCompletedAt());
     }
 
     public ResumeReviewResponse resume(org.springframework.security.core.Authentication auth, Long id) {
@@ -166,11 +167,38 @@ public class MentorReviewService {
         }).filter(Objects::nonNull).toList();
         List<Double> as = ids.stream()
                 .flatMap(i -> assessments.findBySessionUserIdOrderByCreatedAtDesc(i).stream().limit(1))
-                .map(AssessmentResult::getOverallScore).toList();
+                .map(r -> percent(r.getOverallScore())).toList();
         return new MentorDashboardResponse(ids.size(),
                 rs.stream().filter(r -> r.reviewStatus().equals("PENDING")).count(),
                 rs.stream().filter(r -> !r.reviewStatus().equals("PENDING")).count(),
                 avg(rs.stream().map(ResumeReviewResponse::resumeScore).toList()), avg(as));
+    }
+
+    private Double percent(Double score) {
+        return score == null ? null : Math.round(score * 20.0 * 100.0) / 100.0;
+    }
+
+    /** Full feedback history (assessment + resume) authored by the authenticated mentor. */
+    public java.util.List<com.careerguidance.dto.response.MentorFeedbackResponse> feedback(
+            org.springframework.security.core.Authentication auth) {
+        Mentor m = access.current(auth);
+        java.util.List<com.careerguidance.dto.response.MentorFeedbackResponse> items = new java.util.ArrayList<>();
+        for (MentorFeedback f : mentorFeedback.findByMentorIdOrderByCreatedAtDesc(m.getId())) {
+            User student = f.getStudent();
+            items.add(new com.careerguidance.dto.response.MentorFeedbackResponse(f.getId(), f.getFeedbackType(),
+                    student == null ? null : (student.getFirstName() + " " + student.getLastName()).trim(),
+                    f.getFeedback(), f.getCreatedAt()));
+        }
+        for (ResumeFeedback f : resumeFeedback.findByMentorIdOrderByCreatedAtDesc(m.getId())) {
+            User student = f.getResume() == null ? null : f.getResume().getUser();
+            items.add(new com.careerguidance.dto.response.MentorFeedbackResponse(f.getId(), "RESUME",
+                    student == null ? null : (student.getFirstName() + " " + student.getLastName()).trim(),
+                    f.getFeedback(), f.getCreatedAt()));
+        }
+        items.sort(java.util.Comparator.comparing(
+                com.careerguidance.dto.response.MentorFeedbackResponse::createdAt,
+                java.util.Comparator.nullsLast(java.util.Comparator.<java.time.LocalDateTime>reverseOrder())));
+        return items;
     }
 
     private Double avg(List<Double> v) {

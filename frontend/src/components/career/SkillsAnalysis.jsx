@@ -23,6 +23,12 @@ export default function SkillsAnalysis({ resume, careerAnalysis, matchedSkills, 
     ? resumeData.soft_skills
     : [];
 
+  const skillCategories = resumeData.skillCategories && typeof resumeData.skillCategories === 'object'
+    ? Object.entries(resumeData.skillCategories)
+    : (resumeData.skill_categories && typeof resumeData.skill_categories === 'object'
+        ? Object.entries(resumeData.skill_categories)
+        : []);
+
   return (
     <div className="card p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -31,7 +37,7 @@ export default function SkillsAnalysis({ resume, careerAnalysis, matchedSkills, 
             <Cpu className="text-blue-600" size={22} /> Skills Analysis
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Normalized skill extraction via Hugging Face AI & NLP taxonomy matching.
+            Normalized skill extraction via the local AI model & NLP taxonomy matching.
             {evidenceNote && <span className="block text-[11px] text-slate-400 mt-0.5">{evidenceNote}</span>}
           </p>
         </div>
@@ -83,6 +89,31 @@ export default function SkillsAnalysis({ resume, careerAnalysis, matchedSkills, 
                 <Tag size={12} className="text-indigo-500" />
                 {typeof sk === 'string' ? sk : sk.name || JSON.stringify(sk)}
               </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Skill Categories from AI taxonomy */}
+      {skillCategories.length > 0 && (
+        <div>
+          <h3 className="flex items-center gap-2 font-bold text-slate-900 mb-3 text-sm">
+            <Layers size={16} className="text-emerald-600" /> Skill Categories
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {skillCategories.map(([category, skills]) => (
+              <div key={category} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2">
+                  {String(category).replaceAll('_', ' ')}
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Array.isArray(skills) ? skills : [skills]).map((sk, i) => (
+                    <span key={i} className="rounded-lg bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                      {typeof sk === 'string' ? sk : sk.name || JSON.stringify(sk)}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

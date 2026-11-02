@@ -358,7 +358,17 @@ public class AssessmentServiceImpl implements com.careerguidance.service.Assessm
                 .filter(entry -> entry.getValue() > 0 && entry.getValue() < 3.0)
                 .map(entry -> toReadableCategory(entry.getKey()))
                 .toList());
+        // Scores are persisted as 1–5 Likert averages; expose them to API clients as 0–100 percentages.
+        response.setTechnicalScore(toPercent(result.getTechnicalScore()));
+        response.setAptitudeScore(toPercent(result.getAptitudeScore()));
+        response.setPersonalityScore(toPercent(result.getPersonalityScore()));
+        response.setInterestScore(toPercent(result.getInterestScore()));
+        response.setOverallScore(toPercent(result.getOverallScore()));
         return response;
+    }
+
+    private Double toPercent(Double score) {
+        return score == null ? null : round(score * 20.0);
     }
 
     private String toReadableCategory(AssessmentCategoryName name) {

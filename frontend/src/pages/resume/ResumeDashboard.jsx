@@ -429,9 +429,7 @@ export default function ResumeDashboard() {
                     tracking-tight
                   "
                 >
-                  {totalAnalyses > 0
-                    ? totalAnalyses
-                    : 4}
+                  {totalAnalyses}
                 </span>
 
                 <span
@@ -556,6 +554,20 @@ export default function ResumeDashboard() {
                 Loading recent analyses...
               </p>
             </div>
+          ) : history.length === 0 ? (
+            <div className="py-14 text-center space-y-3">
+              <FiFileText size={24} className="mx-auto text-neutral-300" />
+              <p className="text-xs text-neutral-500 font-medium">
+                No resume analyses yet. Upload your resume to get AI-powered career guidance.
+              </p>
+              <Link
+                to="/resume/upload"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0038FF] hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold font-mono transition-colors shadow-md"
+              >
+                <FiUploadCloud size={13} />
+                <span>Upload Resume</span>
+              </Link>
+            </div>
           ) : (
             <div
               className="
@@ -563,20 +575,16 @@ export default function ResumeDashboard() {
                 divide-neutral-100
               "
             >
-              {(
-                history.length > 0
-                  ? history.slice(0, 5)
-                  : [1, 2, 3]
-              ).map((item, i) => {
+              {history.slice(0, 5).map((item, i) => {
                 const analysisId =
                   item?.analysisId ||
                   item?.id ||
-                  i;
+                  null;
 
                 const fileName =
                   item?.originalFileName ||
                   item?.fileName ||
-                  'Kabilan-Resume.pdf';
+                  'Resume.pdf';
 
                 const dateStr =
                   item?.createdAt
@@ -590,7 +598,7 @@ export default function ResumeDashboard() {
                           year: 'numeric',
                         }
                       )
-                    : 'Aug 31, 2026';
+                    : '—';
 
                 const status =
                   item?.status ||

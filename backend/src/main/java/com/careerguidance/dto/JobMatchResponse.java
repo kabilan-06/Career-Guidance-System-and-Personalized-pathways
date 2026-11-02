@@ -5,6 +5,8 @@ import java.util.List;
 
 public class JobMatchResponse {
     private int rank;
+    @JsonProperty("job_id")
+    private String jobId;
     @JsonProperty("job_title")
     private String jobTitle;
     private String company;
@@ -22,6 +24,9 @@ public class JobMatchResponse {
 
     public int getRank() { return rank; }
     public void setRank(int rank) { this.rank = rank; }
+
+    public String getJobId() { return jobId; }
+    public void setJobId(String jobId) { this.jobId = jobId; }
 
     public String getJobTitle() { return jobTitle; }
     public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }

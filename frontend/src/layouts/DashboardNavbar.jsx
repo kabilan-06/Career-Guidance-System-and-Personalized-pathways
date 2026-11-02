@@ -2,9 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FiBell, FiLogOut, FiMenu, FiSearch, 
-  FiSettings, FiUser, FiX, FiChevronDown, FiShield,
-  FiZap, FiActivity
+  FiBell, FiLogOut, FiMenu, FiSettings, FiUser, FiX, FiChevronDown
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
@@ -126,10 +124,8 @@ function UserMenu({ user, onLogout, onClose }) {
 export default function DashboardNavbar({ onMenuClick }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
   const [showNotif, setShowNotif] = useState(false);
   const [showUser, setShowUser] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
   const notifRef = useRef(null);
   const userRef = useRef(null);
 
@@ -155,8 +151,8 @@ export default function DashboardNavbar({ onMenuClick }) {
     <header className="sticky top-0 z-30 w-full border-b border-neutral-200/80 bg-white/95 backdrop-blur-md antialiased">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 w-full">
 
-        {/* ── Left: Mobile Sidebar Trigger & Global Search ── */}
-        <div className="flex items-center gap-3 flex-1 max-w-xl">
+        {/* ── Left: Mobile Sidebar Trigger ── */}
+        <div className="flex items-center gap-3 flex-1">
           <button
             onClick={onMenuClick}
             className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-[#0038FF] lg:hidden transition-colors border border-neutral-200"
@@ -164,37 +160,6 @@ export default function DashboardNavbar({ onMenuClick }) {
           >
             <FiMenu size={18} />
           </button>
-
-          {/* Quick Search */}
-          <div 
-            className={`hidden sm:flex flex-1 items-center gap-2.5 rounded-lg border px-3.5 py-2 transition-all text-xs font-mono
-              ${searchFocused 
-                ? 'border-[#0038FF] bg-white ring-2 ring-[#0038FF]/10' 
-                : 'border-neutral-200 bg-[#F8FAFC]'}`}
-          >
-            <FiSearch size={14} className={`shrink-0 ${searchFocused ? 'text-[#0038FF]' : 'text-neutral-400'}`} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              placeholder="Search pathways, competencies, benchmarks…"
-              className="w-full bg-transparent text-xs text-neutral-900 outline-none placeholder:text-neutral-400 font-sans"
-              aria-label="Search"
-            />
-            {query ? (
-              <button 
-                onClick={() => setQuery('')} 
-                className="text-neutral-400 hover:text-neutral-600 transition-colors"
-              >
-                <FiX size={12} />
-              </button>
-            ) : (
-              <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[9px] font-mono text-neutral-400 shadow-2xs">
-                ⌘K
-              </kbd>
-            )}
-          </div>
         </div>
 
         {/* ── Right Actions ── */}

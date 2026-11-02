@@ -206,15 +206,26 @@ function FeedbackForm({ studentId, type }) {
     formState: { isSubmitting },
   } = useForm();
   const [sent, setSent] = useState(false);
+  const [serverError, setServerError] = useState('');
 
   const submit = async (values) => {
+    if (!studentId) return;
+    setServerError('');
     try {
-      await mentorService.submitFeedback({ studentId, type, ...values });
+      const feedback = values.feedback?.trim();
+      if (!feedback) return;
+      if (type === 'RESUME') {
+        await mentorService.submitResumeFeedback(studentId, feedback);
+      } else {
+        await mentorService.submitAssessmentFeedback(studentId, feedback);
+      }
       setSent(true);
       reset();
       setTimeout(() => setSent(false), 3000);
     } catch (err) {
-      console.error('Failed to submit feedback:', err);
+      setServerError(
+        err.response?.data?.message || 'Failed to submit feedback. Please try again.'
+      );
     }
   };
 
@@ -243,30 +254,33 @@ function FeedbackForm({ studentId, type }) {
         <form className="space-y-4" onSubmit={handleSubmit(submit)} id="mentor-review-form">
           <div className="space-y-1.5">
             <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 font-mono">
-              Evaluation Outcome
-            </label>
-            <select
-              {...register('status')}
-              className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-mono font-medium text-neutral-900 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all cursor-pointer"
-            >
-              <option value="APPROVED">Endorse & Approve</option>
-              <option value="NEEDS_CHANGES">Request Revision & Remediation</option>
-              <option value="REJECTED">Flag Inadequate</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 font-mono">
               Written Evaluation & Notes
             </label>
             <textarea
               required
-              {...register('comment')}
+              {...register('feedback')}
               rows="6"
               className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all resize-none leading-relaxed"
               placeholder="Detail specific gaps, recommended electives, or resume adjustments..."
             />
           </div>
+
+          {!studentId && (
+            <p className="text-xs font-mono text-neutral-400">
+              Select a candidate above to enable feedback.
+            </p>
+          )}
+
+          {serverError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-lg border border-rose-200 bg-rose-50/60 p-3 text-xs font-mono text-rose-700 flex items-center gap-2"
+            >
+              <FiMessageSquare size={14} className="shrink-0 text-rose-600" />
+              <span>{serverError}</span>
+            </motion.div>
+          )}
 
           {sent && (
             <motion.div
@@ -275,7 +289,7 @@ function FeedbackForm({ studentId, type }) {
               className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs font-mono text-emerald-800 flex items-center gap-2"
             >
               <FiCheckCircle size={14} className="shrink-0 text-emerald-600" />
-              <span>Assessment evaluation transmitted successfully.</span>
+              <span>Feedback stored for this candidate.</span>
             </motion.div>
           )}
         </form>
@@ -284,7 +298,7 @@ function FeedbackForm({ studentId, type }) {
       <button
         form="mentor-review-form"
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || !studentId}
         className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0038FF] hover:bg-blue-700 active:scale-[0.99] disabled:opacity-50 text-white py-3 px-4 font-mono text-xs font-semibold tracking-wide transition-all shadow-md shadow-blue-500/20"
       >
         <FiSend size={13} />
@@ -313,13 +327,14 @@ export function MentorDashboard() {
 
   const m = dashData || {};
 
+  // Real per-candidate profile completeness from the mentor students API (0–100).
   const scores =
     students.length > 0
       ? students.slice(0, 6).map((s, i) => ({
-          name: s.firstName || `Student 0${i + 1}`,
-          score: Math.round(Math.random() * 30 + 70),
+          name: s.firstName || `Candidate ${i + 1}`,
+          score: Math.max(0, Math.min(100, Number(s.profileCompletion ?? 0))),
         }))
-      : [{ name: 'Pending', score: 0 }];
+      : [];
 
   const careers = useMemo(() => {
     const interests = {};
@@ -401,11 +416,11 @@ export function MentorDashboard() {
                 Cohort Metrics
               </span>
               <h2 className="text-sm font-bold text-neutral-950 mt-0.5">
-                Competency Distribution
+                Candidate Readiness
               </h2>
             </div>
             <span className="text-[10px] font-mono text-neutral-400">
-              Mean Evaluation Scores
+              Profile completeness (%)
             </span>
           </div>
 
@@ -603,14 +618,115 @@ export function StudentsPage({ profiles = false }) {
   );
 }
 
+// Candidate selector shared by the assessment and resume review views
+function StudentPicker({ students, studentId, onChange, disabled }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 font-mono">
+        Candidate
+      </label>
+      <select
+        value={studentId ?? ''}
+        disabled={disabled || students.length === 0}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-mono font-medium text-neutral-900 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all cursor-pointer disabled:cursor-not-allowed disabled:text-neutral-400"
+      >
+        {students.length === 0 && <option value="">No assigned students</option>}
+        {students.map((s) => (
+          <option key={s.id} value={s.id}>
+            {`${s.firstName || ''} ${s.lastName || ''}`.trim() || s.email}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function useAssignedStudents() {
+  const [students, setStudents] = useState([]);
+  const [studentId, setStudentId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    mentorService
+      .getStudents()
+      .then((x) => {
+        const list = x?.content || x || [];
+        setStudents(list);
+        if (list.length > 0) setStudentId(list[0].id);
+      })
+      .catch(() => setError('Failed to load assigned students.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { students, studentId, setStudentId, loading, error };
+}
+
 // ── ASSESSMENT EVALUATION VIEW ──────────────────────────────────────
 export function AssessmentPage() {
-  const scores = [
-    { name: 'Technical Execution', score: 78 },
-    { name: 'Quantitative Aptitude', score: 85 },
-    { name: 'Domain Interest', score: 92 },
-    { name: 'Workstyle Archetype', score: 88 },
-  ];
+  const { students, studentId, setStudentId, loading: loadingStudents, error: studentsError } =
+    useAssignedStudents();
+  const [review, setReview] = useState(null);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!studentId) return undefined;
+    setFetching(true);
+    setReview(null);
+    setError('');
+    mentorService
+      .getStudentAssessment(studentId)
+      .then(setReview)
+      .catch((err) => {
+        setError(
+          err.response?.status === 404
+            ? 'No submitted assessment for this candidate yet.'
+            : 'Failed to load the assessment review.'
+        );
+      })
+      .finally(() => setFetching(false));
+    return undefined;
+  }, [studentId]);
+
+  const selected = students.find((s) => s.id === studentId);
+  const studentName = selected
+    ? `${selected.firstName || ''} ${selected.lastName || ''}`.trim() || 'Candidate'
+    : '—';
+  const initials =
+    studentName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((x) => x[0])
+      .join('')
+      .toUpperCase() || '—';
+
+  const scores = review
+    ? [
+        { name: 'Technical Skills', score: Math.round(Number(review.technicalScore ?? 0)) },
+        { name: 'Aptitude', score: Math.round(Number(review.aptitudeScore ?? 0)) },
+        { name: 'Interest', score: Math.round(Number(review.interestScore ?? 0)) },
+        { name: 'Personality', score: Math.round(Number(review.personalityScore ?? 0)) },
+      ]
+    : [];
+
+  // Derived strictly from the real returned category scores — no invented text.
+  const strengthItems = scores
+    .filter((x) => x.score >= 70)
+    .map((x) => `${x.name}: ${x.score}% (at or above the 70% benchmark)`);
+  const gapItems = scores
+    .filter((x) => x.score < 60)
+    .map((x) => `${x.name}: ${x.score}% (below the 60% review threshold)`);
+
+  const completedAt = review?.completedAt
+    ? new Date(review.completedAt).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null;
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto antialiased selection:bg-[#0038FF] selection:text-white">
@@ -621,6 +737,13 @@ export function AssessmentPage() {
         Review standardized diagnostic scores, qualitative insights, and provide proctored mentor feedback.
       </Heading>
 
+      <StudentPicker
+        students={students}
+        studentId={studentId}
+        onChange={setStudentId}
+        disabled={loadingStudents}
+      />
+
       <div className="grid gap-6 xl:grid-cols-5">
         
         {/* Left: Detailed Student Evaluation Breakdown */}
@@ -628,21 +751,30 @@ export function AssessmentPage() {
           <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-neutral-950 font-mono text-xs font-bold text-white flex items-center justify-center">
-                AM
+                {initials}
               </div>
               <div>
                 <h2 className="text-base font-bold text-neutral-950">
-                  Aarav Mehta
+                  {studentName}
                 </h2>
                 <p className="text-xs text-neutral-400 font-mono">
-                  Assessment Completed · Jul 28, 2026
+                  {completedAt ? `Assessment Completed · ${completedAt}` : 'No submitted assessment'}
                 </p>
               </div>
             </div>
             <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-bold uppercase text-[#0038FF]">
-              Proctored
+              {review?.recommendedCategory ? `Track: ${review.recommendedCategory}` : 'Awaiting data'}
             </span>
           </div>
+
+          {(fetching || loadingStudents) && (
+            <p className="text-xs font-mono text-neutral-400">Loading candidate review…</p>
+          )}
+          {!fetching && !loadingStudents && (error || studentsError) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs font-mono text-amber-800">
+              {error || studentsError}
+            </div>
+          )}
 
           {/* 4 Score Metric Blocks */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -669,30 +801,30 @@ export function AssessmentPage() {
             ))}
           </div>
 
-          {/* Qualitative Insights */}
+          {/* Qualitative Insights — derived strictly from the real returned scores */}
           <div className="grid gap-4 sm:grid-cols-2 pt-2">
             <Insight
               title="Demonstrated Proficiencies"
-              items={[
-                'Strong algorithmic logic & complexity analysis',
-                'High technical curiosity in distributed systems',
-                'Clear structured articulation and domain goals',
-              ]}
+              items={
+                strengthItems.length > 0
+                  ? strengthItems
+                  : ['No category has reached the 70% benchmark yet.']
+              }
             />
             <Insight
               title="Target Remediation Gaps"
               danger
-              items={[
-                'Practice high-speed quantitative arithmetic',
-                'Structure system design leadership examples',
-                'Reinforce SQL execution and indexing concepts',
-              ]}
+              items={
+                gapItems.length > 0
+                  ? gapItems
+                  : ['No category is below the 60% review threshold.']
+              }
             />
           </div>
         </section>
 
         {/* Right: Advisor Feedback Panel */}
-        <FeedbackForm studentId={1} type="ASSESSMENT" />
+        <FeedbackForm studentId={studentId} type="ASSESSMENT" />
       </div>
     </div>
   );
@@ -700,6 +832,112 @@ export function AssessmentPage() {
 
 // ── RESUME PORTFOLIO EVALUATION VIEW ────────────────────────────────
 export function ResumePage() {
+  const { students, studentId, setStudentId, loading: loadingStudents, error: studentsError } =
+    useAssignedStudents();
+  const [review, setReview] = useState(null);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const load = (id) => {
+    setFetching(true);
+    mentorService
+      .getStudentResume(id)
+      .then(setReview)
+      .catch((err) => {
+        setReview(null);
+        setError(
+          err.response?.status === 404
+            ? 'No resume uploaded by this candidate yet.'
+            : 'Failed to load the resume review.'
+        );
+      })
+      .finally(() => setFetching(false));
+  };
+
+  useEffect(() => {
+    if (!studentId) return undefined;
+    setReview(null);
+    setError('');
+    setActionMsg('');
+    setRejecting(false);
+    setRejectReason('');
+    load(studentId);
+    return undefined;
+  }, [studentId]);
+
+  const selected = students.find((s) => s.id === studentId);
+  const studentName = selected
+    ? `${selected.firstName || ''} ${selected.lastName || ''}`.trim() || 'Candidate'
+    : '—';
+
+  const pctStr = (v) => (v == null ? '—' : `${Math.round(Number(v))}%`);
+  const uploadedAt = review?.uploadedAt
+    ? new Date(review.uploadedAt).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null;
+
+  const download = async () => {
+    if (!studentId) return;
+    try {
+      const res = await mentorService.downloadResume(studentId);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', review?.fileName || 'resume');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionMsg(err.response?.status === 404 ? 'No stored document for this candidate.' : 'Download failed.');
+    }
+  };
+
+  const approve = async () => {
+    if (!studentId) return;
+    try {
+      await mentorService.approveResume(studentId);
+      setActionMsg('Resume approved.');
+      load(studentId);
+    } catch (err) {
+      setActionMsg(err.response?.data?.message || 'Approve action failed.');
+    }
+  };
+
+  const reject = async () => {
+    if (!studentId || !rejectReason.trim()) return;
+    try {
+      await mentorService.rejectResume(studentId, rejectReason.trim());
+      setActionMsg('Resume rejected with feedback.');
+      setRejecting(false);
+      setRejectReason('');
+      load(studentId);
+    } catch (err) {
+      setActionMsg(err.response?.data?.message || 'Reject action failed.');
+    }
+  };
+
+  // Revision flags derived strictly from the real returned scores/skills.
+  const revisionItems = [];
+  if (review?.atsScore != null && review.atsScore < 70) {
+    revisionItems.push(`ATS compatibility ${pctStr(review.atsScore)} — below 70%: reformat sections and standardize headings.`);
+  }
+  if (review?.resumeScore != null && review.resumeScore < 70) {
+    revisionItems.push(`Resume quality ${pctStr(review.resumeScore)} — below 70%: add quantified impact metrics.`);
+  }
+  if (review && (review.skills?.length ?? 0) < 5) {
+    revisionItems.push(`Only ${review.skills?.length ?? 0} skills detected — add more role-relevant keywords.`);
+  }
+  if (review && revisionItems.length === 0) {
+    revisionItems.push('Scores at or above thresholds — no automatic revision flags.');
+  }
+
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto antialiased selection:bg-[#0038FF] selection:text-white">
       <Heading
@@ -709,17 +947,26 @@ export function ResumePage() {
         Review extracted technical proficiencies, parse telemetry, and issue structured guidance.
       </Heading>
 
+      <StudentPicker
+        students={students}
+        studentId={studentId}
+        onChange={setStudentId}
+        disabled={loadingStudents}
+      />
+
       <div className="grid gap-6 xl:grid-cols-5">
         
-        {/* Left: Resume Details & Preview Placeholder */}
+        {/* Left: Resume Details & Review */}
         <section className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-7 shadow-xs xl:col-span-3 space-y-6">
           <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
             <div>
               <h2 className="text-base font-bold text-neutral-950">
-                Aarav Mehta — Curriculum Vitae
+                {studentName} — Curriculum Vitae
               </h2>
               <p className="text-xs text-neutral-400 font-mono mt-0.5">
-                aarav_mehta_resume.pdf · Uploaded Jul 28, 2026
+                {review
+                  ? `${review.fileName}${uploadedAt ? ` · Uploaded ${uploadedAt}` : ''}`
+                  : 'No stored document'}
               </p>
             </div>
             <div className="h-8 w-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0038FF]">
@@ -727,14 +974,28 @@ export function ResumePage() {
             </div>
           </div>
 
-          {/* KPI Metrics */}
+          {(fetching || loadingStudents) && (
+            <p className="text-xs font-mono text-neutral-400">Loading resume review…</p>
+          )}
+          {!fetching && !loadingStudents && (error || studentsError) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs font-mono text-amber-800">
+              {error || studentsError}
+            </div>
+          )}
+          {actionMsg && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-xs font-mono text-[#0038FF]">
+              {actionMsg}
+            </div>
+          )}
+
+          {/* KPI Metrics — real analysis scores */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-4">
               <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
                 Quality Benchmark
               </p>
               <p className="text-2xl font-black font-mono text-neutral-950 mt-1">
-                88%
+                {pctStr(review?.resumeScore)}
               </p>
             </div>
             <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-4">
@@ -742,52 +1003,321 @@ export function ResumePage() {
                 ATS Compatibility
               </p>
               <p className="text-2xl font-black font-mono text-[#0038FF] mt-1">
-                91%
+                {pctStr(review?.atsScore)}
               </p>
             </div>
           </div>
 
-          {/* Document Preview Box */}
+          {/* Document Access Box */}
           <div className="rounded-xl border border-dashed border-neutral-200 bg-[#F8FAFC] p-8 text-center space-y-3">
             <FiFileText className="mx-auto text-neutral-400" size={30} />
             <div>
               <p className="text-xs font-bold text-neutral-900 uppercase font-mono">
-                Document Stream Ready
+                {review?.fileName || 'No document stored'}
               </p>
               <p className="text-xs text-neutral-500 max-w-sm mx-auto mt-0.5">
-                Direct candidate PDF stream connected via mentor document service.
+                {review
+                  ? `Stored file · ${review.fileType || 'document'}${review.fileSize ? ` · ${Math.max(1, Math.round(review.fileSize / 1024))} KB` : ''}`
+                  : 'The candidate has not uploaded a resume yet.'}
               </p>
             </div>
-            <button className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-950 hover:bg-neutral-800 text-white px-4 py-2 text-xs font-mono font-semibold transition-all shadow-2xs">
+            <button
+              onClick={download}
+              disabled={!review || fetching}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-950 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 text-xs font-mono font-semibold transition-all shadow-2xs"
+            >
               <FiFileText size={12} />
-              <span>Inspect Document Stream</span>
+              <span>Download Stored Document</span>
             </button>
           </div>
 
-          {/* Qualitative Tags */}
+          {/* Review status actions */}
+          {review && (
+            <div className="space-y-3 border-t border-neutral-100 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-mono font-bold uppercase text-[#0038FF]">
+                  Status: {review.reviewStatus}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={approve}
+                    disabled={fetching || review.reviewStatus === 'APPROVED'}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed px-3.5 py-2 text-xs font-mono font-semibold transition-all"
+                  >
+                    <FiCheckCircle size={12} />
+                    <span>Approve</span>
+                  </button>
+                  <button
+                    onClick={() => setRejecting((v) => !v)}
+                    disabled={fetching || review.reviewStatus === 'REJECTED'}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed px-3.5 py-2 text-xs font-mono font-semibold transition-all"
+                  >
+                    <FiTarget size={12} />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              </div>
+              {rejecting && (
+                <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50/40 p-3">
+                  <textarea
+                    rows="3"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Reason for rejection (required, stored as resume feedback)..."
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all resize-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setRejecting(false)}
+                      className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-mono text-neutral-600 hover:bg-neutral-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={reject}
+                      disabled={!rejectReason.trim()}
+                      className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white px-3 py-1.5 text-xs font-mono font-semibold transition-all"
+                    >
+                      Confirm Reject
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Qualitative Tags — real extracted skills + derived revision flags */}
           <div className="grid gap-4 sm:grid-cols-2 pt-1">
             <Insight
-              title="Verified Technical Stack"
-              items={[
-                'React · TypeScript · Tailwind CSS',
-                'Node.js · PostgreSQL · REST APIs',
-                'Git version control & CI workflow',
-              ]}
+              title="Extracted Technical Stack"
+              items={
+                review?.skills?.length
+                  ? review.skills.slice(0, 12)
+                  : ['No skills extracted yet.']
+              }
             />
             <Insight
-              title="Suggested Revisions"
+              title="Revision Signals"
               danger
-              items={[
-                'Quantify engineering metrics in bullet points',
-                'Condense summary to 2 lines maximum',
-                'Incorporate target distributed systems keywords',
-              ]}
+              items={revisionItems.length > 0 ? revisionItems : ['Awaiting resume analysis data.']}
             />
           </div>
         </section>
 
         {/* Right: Advisor Feedback Panel */}
-        <FeedbackForm studentId={1} type="RESUME" />
+        <FeedbackForm studentId={studentId} type="RESUME" />
+      </div>
+    </div>
+  );
+}
+
+// ── FEEDBACK HISTORY (real GET /api/mentor/feedback) ───────────────────
+export function FeedbackHub() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    mentorService
+      .getFeedback()
+      .then(setItems)
+      .catch(() => setError('Failed to load feedback history.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-8 max-w-[1400px] mx-auto antialiased selection:bg-[#0038FF] selection:text-white">
+      <Heading eyebrow="Advisory Records" title="Feedback History">
+        Every evaluation you have submitted for assigned candidates — assessment reviews and resume reviews, newest first.
+      </Heading>
+
+      {loading && <p className="text-xs font-mono text-neutral-400">Loading feedback history…</p>}
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 text-xs font-mono text-rose-700">
+          {error}
+        </div>
+      )}
+      {!loading && !error && items.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-neutral-200 bg-white p-12 text-center">
+          <FiMessageSquare className="mx-auto text-neutral-300" size={28} />
+          <p className="mt-3 text-sm font-bold text-neutral-900">No feedback submitted yet</p>
+          <p className="mt-1 text-xs text-neutral-400 font-mono">
+            Open Assessments or Resume Reviews, pick a candidate and commit an evaluation.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {items.map((f) => (
+          <article
+            key={`${f.type}-${f.id}`}
+            className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-xs space-y-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-bold uppercase text-[#0038FF]">
+                  {f.type || 'FEEDBACK'}
+                </span>
+                <span className="text-sm font-bold text-neutral-950">{f.studentName || 'Candidate'}</span>
+              </div>
+              <span className="text-[11px] font-mono text-neutral-400">
+                {f.createdAt
+                  ? new Date(f.createdAt).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })
+                  : ''}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-700 leading-relaxed whitespace-pre-wrap">{f.feedback}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── ADVISOR PROFILE (real GET /api/mentor/profile + dashboard) ──────
+export function MentorProfilePage() {
+  const [profile, setProfile] = useState(null);
+  const [dash, setDash] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [pw, setPw] = useState({ currentPassword: '', newPassword: '' });
+  const [pwMsg, setPwMsg] = useState('');
+  const [pwErr, setPwErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.allSettled([mentorService.getProfile(), mentorService.getDashboard()])
+      .then(([p, d]) => {
+        if (p.status === 'fulfilled') setProfile(p.value);
+        else setError('Failed to load advisor profile.');
+        if (d.status === 'fulfilled') setDash(d.value);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const changePassword = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setPwMsg('');
+    setPwErr('');
+    try {
+      await mentorService.changePassword(pw);
+      setPwMsg('Password changed successfully.');
+      setPw({ currentPassword: '', newPassword: '' });
+    } catch (err) {
+      setPwErr(err.response?.data?.message || 'Password change failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <p className="text-xs font-mono text-neutral-400">Loading advisor profile…</p>;
+  }
+
+  return (
+    <div className="space-y-8 max-w-[1400px] mx-auto antialiased selection:bg-[#0038FF] selection:text-white">
+      <Heading eyebrow="Advisor Profile" title="Professional Account">
+        Your verified mentor account, cohort load and credential management.
+      </Heading>
+
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 text-xs font-mono text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xs space-y-4 lg:col-span-2">
+          <div className="border-b border-neutral-100 pb-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
+              Account Details
+            </span>
+            <h2 className="text-base font-bold text-neutral-950 mt-0.5">Verified Advisor</h2>
+          </div>
+          {profile ? (
+            <div className="grid gap-3 sm:grid-cols-2 text-xs">
+              <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-3.5">
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Name</p>
+                <p className="font-semibold text-neutral-900 mt-1">
+                  {profile.firstName} {profile.lastName}
+                </p>
+              </div>
+              <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-3.5">
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Email</p>
+                <p className="font-mono text-neutral-900 mt-1 break-all">{profile.email}</p>
+              </div>
+              <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-3.5">
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Account Status</p>
+                <p className="font-semibold text-neutral-900 mt-1">
+                  {profile.active === false ? 'Disabled' : 'Active'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-neutral-200/80 bg-[#F8FAFC] p-3.5">
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Role</p>
+                <p className="font-semibold text-neutral-900 mt-1">Verified Mentor</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs font-mono text-neutral-400">Profile data unavailable.</p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3 pt-1">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5 text-center">
+              <p className="text-xl font-black font-mono text-[#0038FF]">{dash?.assignedStudents ?? '—'}</p>
+              <p className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Assigned Students</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3.5 text-center">
+              <p className="text-xl font-black font-mono text-amber-600">{dash?.pendingResumeReviews ?? '—'}</p>
+              <p className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Pending Reviews</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5 text-center">
+              <p className="text-xl font-black font-mono text-emerald-600">{dash?.completedReviews ?? '—'}</p>
+              <p className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Completed Reviews</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xs space-y-4 self-start">
+          <div className="border-b border-neutral-100 pb-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 font-mono">
+              Credentials
+            </span>
+            <h2 className="text-base font-bold text-neutral-950 mt-0.5">Change Password</h2>
+          </div>
+          <form className="space-y-3" onSubmit={changePassword}>
+            <input
+              type="password"
+              required
+              value={pw.currentPassword}
+              onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })}
+              placeholder="Current password"
+              className="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all"
+            />
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={pw.newPassword}
+              onChange={(e) => setPw({ ...pw, newPassword: e.target.value })}
+              placeholder="New password (min 8 characters)"
+              className="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-[#0038FF] transition-all"
+            />
+            {pwErr && <p className="text-xs font-mono text-rose-600">{pwErr}</p>}
+            {pwMsg && <p className="text-xs font-mono text-emerald-600">{pwMsg}</p>}
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full rounded-lg bg-[#0038FF] hover:bg-blue-700 disabled:opacity-50 text-white py-2.5 text-xs font-mono font-semibold transition-all shadow-md shadow-blue-500/20"
+            >
+              {saving ? 'Saving…' : 'Update Password'}
+            </button>
+          </form>
+        </section>
       </div>
     </div>
   );
@@ -804,10 +1334,11 @@ export function Placeholder({ title, description }) {
         <FiActivity className="mx-auto text-neutral-300" size={32} />
         <div>
           <p className="text-sm font-bold text-neutral-900 font-mono uppercase">
-            {title} Module Calibrated
+            {title} — Not Available Yet
           </p>
           <p className="text-xs text-neutral-500 max-w-md mx-auto mt-1">
-            Endpoint connected. Workspace awaiting active supervisory requests from the candidate cohort.
+            This module has no backing service in the current system. Use Feedback Hub and the
+            per-candidate review pages for advisor communication.
           </p>
         </div>
       </div>

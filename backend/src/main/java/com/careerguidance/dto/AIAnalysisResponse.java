@@ -51,6 +51,15 @@ public class AIAnalysisResponse {
     @JsonAlias({"roadmap"})
     private List<RoadmapResponse> roadmap;
 
+    /**
+     * Per-role guidance produced by the local AI pipeline. Each entry holds the
+     * skill gaps, course recommendations and roadmap for one matched role so the
+     * UI can switch career targets without re-running inference.
+     */
+    @JsonProperty("role_guidance")
+    @JsonAlias({"role_guidance", "roleGuidance"})
+    private List<Map<String, Object>> roleGuidance;
+
     @JsonProperty("execution_time")
     @JsonAlias({"execution_time", "executionTime"})
     private double executionTime;
@@ -97,6 +106,9 @@ public class AIAnalysisResponse {
 
     public List<RoadmapResponse> getRoadmap() { return roadmap; }
     public void setRoadmap(List<RoadmapResponse> roadmap) { this.roadmap = roadmap; }
+
+    public List<Map<String, Object>> getRoleGuidance() { return roleGuidance; }
+    public void setRoleGuidance(List<Map<String, Object>> roleGuidance) { this.roleGuidance = roleGuidance; }
 
     public double getExecutionTime() { return executionTime; }
     public void setExecutionTime(double executionTime) { this.executionTime = executionTime; }

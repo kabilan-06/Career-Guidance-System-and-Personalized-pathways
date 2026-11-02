@@ -47,22 +47,9 @@ api.interceptors.response.use(
       error.config.__resolveShared?.(Promise.reject(error));
       pendingGets.delete(key);
     }
-    // A forbidden request is not a logout. Keep the session so the page can
-    // display the server's actual access/availability message.
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // A forbidden request is not a logout. Keep the session so the page can
-    // display the server's actual access/availability message.
+    // An expired/invalid session logs the user out. A forbidden request is
+    // NOT a logout: keep the session so the page can display the server's
+    // actual access/availability message.
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

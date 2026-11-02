@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -17,6 +17,7 @@ import {
 } from 'react-icons/fi';
 import AppLayout from '../../components/layout/AppLayout';
 import useAssessment from '../../hooks/useAssessment';
+import api from '../../services/api';
 
 // Master problem bank mapped to curriculum competency vectors
 const CURATED_PROBLEM_BANK = [
@@ -125,30 +126,46 @@ export default function CodingAssessment() {
   const [selectedFilter, setSelectedFilter] = useState('All Recommended');
   const [completed, setCompleted] = useState({});
 
-  // Candidate skill scores ONLY from a real completed assessment result.
-  // No hardcoded fallback map: without evidence every problem is shown
-  // unflagged as a practice resource, with an honest notice.
-  const candidateScores = useMemo(() => {
-    return assessment?.result?.technicalBySkill || null;
-  }, [assessment]);
+  // Real evidence only: the in-session submit result, else the latest submitted
+  // result from the assessment history API. Scores are 0–100 category percentages.
+  const [historyResult, setHistoryResult] = useState(null);
+  useEffect(() => {
+    api
+      .get('/api/assessment/history')
+      .then(({ data }) => {
+        if (Array.isArray(data) && data.length > 0) setHistoryResult(data[0]);
+      })
+      .catch(() => { /* no evidence yet — library stays unflagged */ });
+  }, []);
 
-  const hasEvidence = candidateScores && Object.keys(candidateScores).length > 0;
+  const evidence = assessment?.result || historyResult;
+  const hasEvidence = evidence != null;
 
-  // Tag problems dynamically with their personalized remediation priority.
-  // Without real per-vector scores nothing is flagged as a "gap".
+  // Readiness band derived from the real technical score:
+  // <60 → Foundational ready, 60–79 → Intermediate ready, 80+ → Advanced ready.
+  const readinessRank = useMemo(() => {
+    if (!evidence) return null;
+    const tech = Number(evidence.technicalScore ?? 0);
+    if (tech >= 80) return 3;
+    if (tech >= 60) return 2;
+    return 1;
+  }, [evidence]);
+
+  const DIFFICULTY_RANK = { Foundational: 1, Intermediate: 2, Advanced: 3 };
+
+  // Tag problems that sit above the candidate's current readiness band.
+  // Without a real result nothing is flagged — the full library is shown as-is.
   const enrichedProblems = useMemo(() => {
     return CURATED_PROBLEM_BANK.map((problem) => {
-      const score = candidateScores?.[problem.skillVector] ?? null;
-      const isGap = score != null && score < problem.benchmarkGapThreshold;
-      const delta = score != null ? problem.benchmarkGapThreshold - score : 0;
+      const rank = DIFFICULTY_RANK[problem.difficulty] ?? 1;
+      const isGap = readinessRank != null && rank > readinessRank;
       return {
         ...problem,
-        candidateScore: score,
         isGap,
-        gapDelta: delta > 0 ? delta : 0,
+        gapDelta: isGap ? rank - readinessRank : 0,
       };
     });
-  }, [candidateScores]);
+  }, [readinessRank]);
 
   const filteredProblems = useMemo(() => {
     if (selectedFilter === 'Identified Gaps Only') {
@@ -191,7 +208,7 @@ export default function CodingAssessment() {
             </h1>
             <p className="text-xs sm:text-sm text-neutral-500 max-w-2xl leading-relaxed">
               {hasEvidence
-                ? 'Algorithmic challenges dynamically selected to close your specific diagnostic assessment skill gaps.'
+                ? 'Practice challenges sequenced against your latest real assessment result — challenges above your readiness band are flagged.'
                 : 'Curated practice library with real external problem links. Complete an assessment to personalize gap flags.'}
             </p>
           </div>
@@ -228,7 +245,9 @@ export default function CodingAssessment() {
                 {highPriorityGapsCount} <span className="text-sm font-normal text-neutral-400 font-sans">Priority Areas</span>
               </p>
               <p className="text-[11px] text-neutral-400 font-mono mt-0.5">
-                {hasEvidence ? 'Curated based on scores below benchmark' : 'No assessment evidence — showing full library'}
+                {hasEvidence
+                  ? `Above your band · technical score ${Math.round(Number(evidence.technicalScore ?? 0))}%`
+                  : 'No assessment evidence — showing full library'}
               </p>
             </div>
           </motion.div>
@@ -344,7 +363,7 @@ export default function CodingAssessment() {
 
                     {prob.isGap && !isDone && (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200/80 px-2 py-0.5 text-[9px] font-mono font-bold uppercase text-amber-800">
-                        <FiAlertTriangle size={9} /> -{prob.gapDelta}% Gap
+                        <FiAlertTriangle size={9} /> +{prob.gapDelta} level{prob.gapDelta > 1 ? 's' : ''} above band
                       </span>
                     )}
                   </div>

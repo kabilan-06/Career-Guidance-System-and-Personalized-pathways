@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiTerminal,
@@ -20,18 +21,72 @@ import EmptyState from '../../components/common/EmptyState';
 import ResultCard from '../../components/assessment/ResultCard';
 import ScoreCircle from '../../components/assessment/ScoreCircle';
 import PersonalityCard from '../../components/assessment/PersonalityCard';
-import CareerPreviewCard from '../../components/assessment/CareerPreviewCard';
 import SkillRadarChart from '../../components/charts/SkillRadarChart';
 import InterestChart from '../../components/charts/InterestChart';
+import api from '../../services/api';
 import useAssessment from '../../hooks/useAssessment';
-import { calculateAssessmentResult } from '../../utils/assessmentScoring';
 
 export default function AssessmentResult() {
   const assessment = useAssessment();
-  const result =
-    assessment.result || calculateAssessmentResult(assessment.answers);
+  // Real result only: the in-session submit response, or the latest submitted
+  // result from the assessment history API when the page is reopened/refreshed.
+  const [historyResult, setHistoryResult] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const result = assessment.result || historyResult;
 
-  if (assessment.loading) return <LoadingAnimation />;
+  useEffect(() => {
+    if (assessment.result) {
+      setLoadingHistory(false);
+      return;
+    }
+    api
+      .get('/api/assessment/history')
+      .then(({ data }) => {
+        if (Array.isArray(data) && data.length > 0) setHistoryResult(data[0]);
+      })
+      .catch(() => { /* no submitted result yet — empty state below */ })
+      .finally(() => setLoadingHistory(false));
+  }, [assessment.result]);
+
+  // Radar axes come straight from the four category scores the backend returns (0–100).
+  const radarData = useMemo(
+    () =>
+      result
+        ? [
+            { subject: 'Technical', score: Number(result.technicalScore ?? 0) },
+            { subject: 'Aptitude', score: Number(result.aptitudeScore ?? 0) },
+            { subject: 'Personality', score: Number(result.personalityScore ?? 0) },
+            { subject: 'Interest', score: Number(result.interestScore ?? 0) },
+          ]
+        : [],
+    [result]
+  );
+
+  // Interest distribution derived from the real submitted answers (question → selected option label).
+  const interestDistribution = useMemo(() => {
+    const answers = assessment.answers || {};
+    const counts = {};
+    (assessment.questions || []).forEach((q) => {
+      const isInterest =
+        String(q.category || '').toUpperCase() === 'INTEREST' || q.sectionId === 'interests';
+      if (!isInterest) return;
+      const answer = answers[q.id];
+      if (answer === undefined || answer === null || answer === '') return;
+      const option = (q.options || []).find((o) => String(o.value) === String(answer));
+      const label = option?.label;
+      if (label) counts[label] = (counts[label] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [assessment.answers, assessment.questions]);
+
+  // Improvement areas come from the backend's real weakness analysis (score thresholds).
+  const improvementAreas = useMemo(() => {
+    if (result?.improvementAreas?.length) return result.improvementAreas; // local fallback shape
+    if (result?.weaknesses?.length) return result.weaknesses;
+    return [];
+  }, [result]);
+
+  if (assessment.loading || loadingHistory) return <LoadingAnimation />;
 
   if (!result) {
     return (
@@ -116,7 +171,9 @@ export default function AssessmentResult() {
                 Primary Trajectory Recommendation
               </span>
               <p className="text-base font-extrabold text-neutral-950 font-sans">
-                {result.careers?.[0]?.title || 'Backend Systems Engineer'}
+                {result.recommendedCategory
+                  ? `${result.recommendedCategory} trajectory`
+                  : 'Complete an assessment to unlock your trajectory'}
               </p>
             </div>
           </motion.div>
@@ -175,7 +232,7 @@ export default function AssessmentResult() {
             </div>
 
             <div className="pt-2">
-              <SkillRadarChart data={result.technicalBySkill} />
+              <SkillRadarChart data={radarData} />
             </div>
           </section>
 
@@ -197,7 +254,14 @@ export default function AssessmentResult() {
             </div>
 
             <div className="pt-2">
-              <InterestChart data={result.interestDistribution} />
+              {interestDistribution.length > 0 ? (
+                <InterestChart data={interestDistribution} />
+              ) : (
+                <div className="h-72 flex items-center justify-center text-xs font-mono text-neutral-400 text-center px-6">
+                  No interest selections recorded for this result. Re-take the assessment and answer
+                  the interest section to populate your domain distribution.
+                </div>
+              )}
             </div>
           </section>
 
@@ -235,20 +299,26 @@ export default function AssessmentResult() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {result.improvementAreas?.map((area, i) => (
-                  <div
-                    key={i}
-                    className="flex flex-col justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/40 p-3.5 space-y-2 hover:border-neutral-300 hover:bg-white transition-all"
-                  >
-                    <div className="flex items-center gap-1.5 text-[#0038FF]">
-                      <FiTarget size={13} />
-                      <span className="text-[10px] font-mono font-bold uppercase">Priority 0{i + 1}</span>
+                {improvementAreas.length > 0 ? (
+                  improvementAreas.map((area, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/40 p-3.5 space-y-2 hover:border-neutral-300 hover:bg-white transition-all"
+                    >
+                      <div className="flex items-center gap-1.5 text-[#0038FF]">
+                        <FiTarget size={13} />
+                        <span className="text-[10px] font-mono font-bold uppercase">Priority 0{i + 1}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-neutral-800 leading-snug">
+                        {area}
+                      </p>
                     </div>
-                    <p className="text-xs font-semibold text-neutral-800 leading-snug">
-                      {area}
-                    </p>
+                  ))
+                ) : (
+                  <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4 text-xs font-mono text-emerald-800">
+                    No category scored below the review threshold — no improvement areas were flagged.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -259,7 +329,7 @@ export default function AssessmentResult() {
 
         </div>
 
-        {/* ── Section 4: Recommended Trajectory Roles ── */}
+        {/* ── Section 4: Recommended Trajectory ── */}
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-neutral-200/80 pb-3">
             <div>
@@ -267,18 +337,34 @@ export default function AssessmentResult() {
                 Trajectory Matches
               </span>
               <h2 className="text-lg font-extrabold tracking-tight text-neutral-950 mt-0.5">
-                Recommended Career Roles
+                Recommended Career Direction
               </h2>
             </div>
             <span className="text-xs font-mono text-neutral-500">
-              Ranked by profile and competency match percentage
+              Derived from your category scores and interest allocation
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {result.careers?.map((career) => (
-              <CareerPreviewCard key={career.title} career={career} />
-            ))}
+          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#0038FF]">
+                Recommended Category
+              </span>
+              <p className="text-xl font-extrabold text-neutral-950">
+                {result.recommendedCategory || 'Not determined'}
+              </p>
+              <p className="text-xs text-neutral-500 max-w-2xl">
+                Run the full AI career guidance pipeline on your resume for role-level matches,
+                skill gaps, course recommendations and a step-by-step roadmap.
+              </p>
+            </div>
+            <Link
+              to="/resume/ai-guidance"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0038FF] hover:bg-blue-700 active:scale-[0.99] text-white py-2.5 px-5 font-mono text-xs font-semibold tracking-wide transition-all shadow-md shadow-blue-500/20 group"
+            >
+              <span>Open AI Career Guidance</span>
+              <FiArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
           </div>
         </section>
 

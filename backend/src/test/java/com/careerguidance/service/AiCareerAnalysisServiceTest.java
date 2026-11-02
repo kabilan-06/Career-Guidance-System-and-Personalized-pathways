@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
 public class AiCareerAnalysisServiceTest {
 
     @Mock
-    private HuggingFaceAIClient aiClient;
+    private LocalAIServiceClient aiClient;
 
     @Mock
     private AiCareerAnalysisRepository analysisRepository;
@@ -77,7 +77,7 @@ public class AiCareerAnalysisServiceTest {
         aiResponse.setExecutionTime(1.85);
         aiResponse.setResume(Map.of("skills", List.of("Java", "Spring Boot", "React")));
 
-        when(aiClient.analyzeResume(file)).thenReturn(aiResponse);
+        when(aiClient.analyzeResume(any(byte[].class), anyString())).thenReturn(aiResponse);
 
         AiAnalysisResultDto result = service.analyzeResume(10L, file);
 
@@ -120,7 +120,7 @@ public class AiCareerAnalysisServiceTest {
         savedAnalysis.setStatus(AnalysisStatus.PROCESSING);
 
         when(analysisRepository.save(any(AiCareerAnalysis.class))).thenReturn(savedAnalysis);
-        when(aiClient.analyzeResume(file)).thenThrow(new AIServiceException("AI_SERVICE_UNAVAILABLE", "Hugging Face Space is unreachable"));
+        when(aiClient.analyzeResume(any(byte[].class), anyString())).thenThrow(new AIServiceException("AI_SERVICE_UNAVAILABLE", "Local AI service is unreachable"));
 
         AIServiceException ex = assertThrows(AIServiceException.class, () -> service.analyzeResume(10L, file));
         assertEquals("AI_SERVICE_UNAVAILABLE", ex.getErrorCode());
