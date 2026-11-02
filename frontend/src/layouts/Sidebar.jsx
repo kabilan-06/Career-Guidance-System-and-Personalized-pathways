@@ -18,6 +18,7 @@ import {
   FiSettings,
   FiX,
   FiActivity,
+  FiZap,
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +45,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/assessments/ai-analysis', label: 'AI Performance', icon: FiCpu },
       { to: '/assessments/skill-growth', label: 'Skill Growth', icon: FiTrendingUp },
+      { to: '/automation-studio', label: 'Simulators & Automation', icon: FiZap },
     ],
   },
   {

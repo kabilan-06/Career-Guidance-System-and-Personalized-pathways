@@ -44,6 +44,7 @@ import ResumeInsights from './pages/resume/ResumeInsights';
 import ResumeSkillProfile from './pages/resume/ResumeSkillProfile';
 import ResumeReport from './pages/resume/ResumeReport';
 import AICareerGuidancePage from './pages/resume/AICareerGuidancePage';
+import AutomationStudio from './components/AutomationStudio';
 
 // Admin — Resume Intelligence
 import ResumeAdminDashboard from './pages/admin/ResumeAdminDashboard';
@@ -138,6 +139,10 @@ function App() {
               <Route path="/resume/skill-profile" element={<ProtectedRoute><ResumeSkillProfile /></ProtectedRoute>} />
               <Route path="/resume/report" element={<ProtectedRoute><ResumeReport /></ProtectedRoute>} />
               <Route path="/resume/ai-guidance" element={<ProtectedRoute><AICareerGuidancePage /></ProtectedRoute>} />
+
+              {/* Automation Studio & Interactive Simulators */}
+              <Route path="/automation-studio" element={<AutomationStudio />} />
+              <Route path="/simulators" element={<AutomationStudio />} />
 
               {/* Mentor verification */}
               <Route path="/become-mentor" element={<BecomeMentor />} />
