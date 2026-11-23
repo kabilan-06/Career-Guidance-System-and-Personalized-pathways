@@ -40,7 +40,7 @@ spring:
           provider_disables_autocommit: false
 
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 resume:
   storage-dir: ${RESUME_STORAGE_DIR:uploads/resumes}

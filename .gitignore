@@ -10,14 +10,12 @@ __pycache__/
 .DS_Store
 backend/target/
 uploads/
-hs_err_pid*.log
+# Logs
+*.log
 backend/*.log
 ai-service/*.log
-*.class
+hs_err_pid*.log
+
+# Temp / build artifacts
 TestConnection.java
 diff_output.txt
-where
-echo
-cd
-java
-*.log

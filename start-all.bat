@@ -9,8 +9,15 @@ set BACKEND_DIR=%ROOT_DIR%backend
 set FRONTEND_DIR=%ROOT_DIR%frontend
 set AI_SERVICE_DIR=%ROOT_DIR%ai-service
 
+where py >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+  set PYTHON_CMD=py -3.12
+) else (
+  set PYTHON_CMD=python
+)
+
 echo [1/3] Starting FastAPI AI Service (Port 8000)...
-start "FastAPI AI Service [Port 8000]" cmd /k "cd /d "%AI_SERVICE_DIR%" && py -3.12 -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload"
+start "FastAPI AI Service [Port 8000]" cmd /k "cd /d "%AI_SERVICE_DIR%" && %PYTHON_CMD% -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload"
 
 echo [2/3] Starting Spring Boot Backend (Port 8080)...
 start "Spring Boot Backend [Port 8080]" cmd /k "cd /d "%BACKEND_DIR%" && mvn spring-boot:run"

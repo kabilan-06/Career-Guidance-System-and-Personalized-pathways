@@ -1,6 +1,7 @@
 import os
 import logging
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import re
@@ -15,6 +16,14 @@ app = FastAPI(
     title="AI Career Guidance System API",
     description="Full AI Career Guidance system processing PDF/DOCX resumes, semantic matching, skill gaps, course recommendations, SHAP explainability, and career roadmaps.",
     version="2.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Register Router Modules
