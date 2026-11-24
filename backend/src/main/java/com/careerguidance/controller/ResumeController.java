@@ -36,7 +36,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping("/api/resumes")
 @Tag(name = "Resumes", description = "Resume upload, parsing, analysis, and management")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('STUDENT')")
+@PreAuthorize("isAuthenticated()")
 public class ResumeController {
 
     private final ResumeService resumeService;
